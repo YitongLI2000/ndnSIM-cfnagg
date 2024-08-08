@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/ndnSIM" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/ndnSIM/NFD" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/ndnSIM/NFD/websocketpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/ndnSIM/ndn-cxx" vcs="Git" />
+  </component>
+</project>
