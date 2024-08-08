@@ -13,7 +13,6 @@
       <change afterPath="$PROJECT_DIR$/.idea/examples.iml" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/log/agg10_RTO.txt" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/log/agg10_RTT.txt" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/log/agg10_window.txt" afterDir="false" />
@@ -109,7 +108,6 @@
       <change afterPath="$PROJECT_DIR$/log/consumer_aggregationTime.txt" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/log/consumer_window.txt" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../experiments/result/consumer_rtt_aggergationTime.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../experiments/result/consumer_rtt_aggregationTime.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NFD" beforeDir="false" afterPath="$PROJECT_DIR$/../NFD" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NFD/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../NFD/.github/workflows/ci.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NFD/.github/workflows/docs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../NFD/.github/workflows/docs.yml" afterDir="false" />
@@ -970,7 +968,6 @@
       <change beforePath="$PROJECT_DIR$/../apps/ndn-consumer-INA.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../apps/ndn-consumer-INA.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../apps/ndn-consumer-INA.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../apps/ndn-consumer-INA.hpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../apps/ndn-consumer.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../apps/ndn-consumer.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../apps/ndn-consumer.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../apps/ndn-consumer.hpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/agg-aimd-test.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/agg-aimd-test.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/log/agg0_RTO.txt" beforeDir="false" afterPath="$PROJECT_DIR$/log/agg0_RTO.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/log/agg0_RTT.txt" beforeDir="false" afterPath="$PROJECT_DIR$/log/agg0_RTT.txt" afterDir="false" />
@@ -1005,10 +1002,8 @@
       <change beforePath="$PROJECT_DIR$/log/agg_consumer_RTO_periodical.txt" beforeDir="false" afterPath="$PROJECT_DIR$/log/agg_consumer_RTO_periodical.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/log/agg_consumer_RTT_packet.txt" beforeDir="false" afterPath="$PROJECT_DIR$/log/agg_consumer_RTT_packet.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/log/agg_consumer_window.txt" beforeDir="false" afterPath="$PROJECT_DIR$/log/agg_consumer_window.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/topologies/DataCenterTopology.txt" beforeDir="false" afterPath="$PROJECT_DIR$/topologies/DataCenterTopology.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../experiments/ResultMeasurement.py" beforeDir="false" afterPath="$PROJECT_DIR$/../experiments/ResultMeasurement.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../experiments/result/consumer_rtt.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../experiments/result/consumer_window_rto.png" beforeDir="false" afterPath="$PROJECT_DIR$/../experiments/result/consumer_window_rto.png" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../ndn-cxx" beforeDir="false" afterPath="$PROJECT_DIR$/../ndn-cxx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../ndn-cxx/.github/workflows/ci.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../ndn-cxx/.github/workflows/ci.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../ndn-cxx/.github/workflows/docs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../ndn-cxx/.github/workflows/docs.yml" afterDir="false" />
@@ -1729,24 +1724,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
-    &quot;cf.advertisement.text.has.clang-format&quot;: &quot;true&quot;,
-    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
-    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "cf.advertisement.text.has.clang-format": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "<unknown>",
+    "last_opened_file_path": "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RdControllerToolWindowsLayoutState" isNewUi="true">
     <layout>
       <window_info id="Bookmarks" show_stripe_button="false" side_tool="true" />
@@ -1791,7 +1786,7 @@
       <option name="presentableId" value="Default" />
       <updated>1722690265765</updated>
       <workItem from="1722690266893" duration="3884000" />
-      <workItem from="1723101371709" duration="2749000" />
+      <workItem from="1723101371709" duration="2760000" />
     </task>
     <servers />
   </component>

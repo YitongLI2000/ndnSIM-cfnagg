@@ -116,7 +116,7 @@ Consumer::Consumer()
     , total_response_time(0)
     , round(0)
     , totalAggregateTime(0)
-    , iteration(0)
+    , iterationCount(0)
 {
     m_rtt = CreateObject<RttMeanDeviation>();
 }
@@ -261,12 +261,6 @@ Consumer::ConstructAggregationTree()
         m_timeoutThreshold[i] = 6 * m_retxTimer;
         RTT_threshold.push_back(0);
     }
-
-    // Testing, delete later
-    NS_LOG_DEBUG("Initialize the following variables.");
-    NS_LOG_DEBUG("RTO_Timer: " << RTO_Timer[0].GetMilliSeconds() << " ms");
-    NS_LOG_DEBUG("m_timeoutThreshold: " << m_timeoutThreshold[0].GetMilliSeconds() << " ms");
-
  }
 
 
@@ -376,7 +370,7 @@ Consumer::aggregate(const ModelData& data, const uint32_t& seq)
 
 /**
  * Get mean average of model parameters for one iteration
- * @param dataName
+ * @param seq
  * @return Mean average of model parameters
  */
 std::vector<float>
@@ -434,7 +428,7 @@ Consumer::AggregateTimeSum (int64_t aggregate_time)
 {
     totalAggregateTime += aggregate_time;
     NS_LOG_DEBUG("totalAggregateTime is: " << totalAggregateTime);
-    ++iteration;
+    ++iterationCount;
 }
 
 
@@ -446,13 +440,14 @@ Consumer::AggregateTimeSum (int64_t aggregate_time)
 int64_t
 Consumer::GetAggregateTimeAverage()
 {
-    if (iteration == 0)
+    if (iterationCount == 0)
     {
         NS_LOG_DEBUG("Error happened when calculating aggregate time!");
+        Simulator::Stop();
         return 0;
     }
 
-    return totalAggregateTime / iteration;
+    return totalAggregateTime / iterationCount;
 }
 
 
@@ -496,8 +491,7 @@ Consumer::SetRetxTimer(Time retxTimer)
         Simulator::Remove(m_retxEvent); // slower, but better for memory
     }
 
-    // Schedule new timeout
-    //m_timeoutThreshold = 6 * retxTimer;
+    // Schedule timeout check event
     NS_LOG_DEBUG("Next interval to check timeout is: " << m_retxTimer.GetMilliSeconds() << " ms");
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Consumer::CheckRetxTimeout, this);
 }
@@ -529,10 +523,9 @@ Consumer::CheckRetxTimeout()
 
     for (auto it = m_timeoutCheck.begin(); it != m_timeoutCheck.end();){
         // Parse the string and extract the first segment, e.g. "agg0", then find out its round
-        // ToDo: Need to handle tree broadcasting, their prefix can't be found in findRoundIndex
         std::string type = make_shared<Name>(it->first)->get(-2).toUri();
-        //NS_LOG_DEBUG("Interest name: " << it->first);
 
+        // For two types of data, check timeout respectively
         if (type == "initialization") {
             if (now - it->second > (3 * m_retxTimer)) {
                 std::string name = it->first;
@@ -554,22 +547,6 @@ Consumer::CheckRetxTimeout()
                 ++it;
             }
         }
-
-/*        size_t start = it->first.find_first_not_of('/');
-        size_t end = it->first.find('/', start);
-        std::string segment1;
-        if (start != std::string::npos) {
-            segment1 = it->first.substr(start, end - start);
-        }
-        int roundIndex = findRoundIndex(segment1);
-
-        if (now - it->second > m_timeoutThreshold[roundIndex]) {
-            std::string name = it->first;
-            it = m_timeoutCheck.erase(it);
-            OnTimeout(name);
-        } else {
-            ++it;
-        }*/
     }
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Consumer::CheckRetxTimeout, this);
 }
@@ -579,6 +556,7 @@ Consumer::CheckRetxTimeout()
 /**
  * Compute new RTO based on response time of recent packets
  * @param resTime
+ * @param roundIndex data packet's round index
  * @return New RTO
  */
 Time
@@ -601,7 +579,7 @@ Consumer::RTOMeasurement(int64_t resTime, int roundIndex)
 
 
 /**
- * When ScheduleNextPacket() is invoked, this function is used to get relevant info and prepare to send interests
+ * When ScheduleNextPacket() is invoked, this function is called. Pop elements from the interest queue, and prepare for actual interest sending
  */
 void
 Consumer::SendPacket()
@@ -623,108 +601,6 @@ Consumer::SendPacket()
         NS_LOG_INFO("All available interests have been sent, no further operation required.");
     }
 }
-
-
-
-
-
-
-/*void
-Consumer::SendPacket()
-{
-    if (!m_active)
-        return;
-
-    // Initialize a full list for aggregation in entire iteration
-    if (m_agg_newDataName.find(globalSeq) == m_agg_newDataName.end() && globalSeq != 0) {
-        std::vector<std::string> objectProducer;
-        std::string token;
-        std::istringstream tokenStream(proList);
-        char delimiter = '.';
-        while (std::getline(tokenStream, token, delimiter)) {
-           objectProducer.push_back(token);
-        }
-
-        for (const auto& aggTree : aggregationTree) {
-            auto initialAllocation = getLeafNodes(m_nodeprefix, aggTree);
-            std::vector<std::string> roundChild;
-
-            for (const auto& [child, leaves] : initialAllocation) {
-                std::string name_sec1;
-                roundChild.push_back(child);
-
-                for (const auto& leaf : leaves) {
-                    if (std::find(objectProducer.begin(), objectProducer.end(), leaf) != objectProducer.end()) {
-                        name_sec1 += leaf + ".";
-                    } else {
-                        NS_LOG_DEBUG("Error when initializing mapping!");
-                        ns3::Simulator::Stop();
-                    }
-                }
-                name_sec1.resize(name_sec1.size() - 1);
-                map_child_nameSec1[child] = name_sec1; // Map for interest splitting later
-                m_agg_newDataName[globalSeq].push_back(child); // Map for entire iteration
-            }
-            map_agg_oldSeq_newName[globalSeq].push_back(roundChild); // Map for each round within one iteration
-        }
-    }
-
-    // Broadcast aggregation tree in iteration 0
-    if (globalSeq == 0) {
-        if (!broadcastList.empty()) {
-            TreeBroadcast();
-        } else {
-            NS_LOG_DEBUG("Error when broadcasting tree to aggregators!");
-            Simulator::Stop();
-        }
-        globalSeq = ++m_seq;
-    }
-    // Start sending actual packets from iteration 1
-    else {
-        /// "globalRound" represents current round, if there's no sub-tree, there's only one round in each iteration;
-        /// otherwise, the number of round represents the number of sub-trees
-
-        // Start computing aggregation time
-        if (globalRound == 0)
-            aggregateStartTime[globalSeq] = ns3::Simulator::Now();
-
-        // Update to sub-tree when there're many sub-trees apart from main tree
-        const auto& aggregationTreeElement = aggregationTree[globalRound];
-
-        // Get child nodes and leaf nodes
-        auto childAllocation = getLeafNodes(m_nodeprefix, aggregationTreeElement);
-
-        std::vector<std::string> seqName;
-
-        // Divide interest into several ones and send new ones
-        for (const auto& [child, leaves] : childAllocation) {
-            std::string name_sec1;
-            std::string name;
-            std::string nameWithType;
-
-            name_sec1 = map_child_nameSec1[child];
-            name = "/" + child + "/" + name_sec1;
-            nameWithType = name + "/data";
-
-            // Store the divided interests' name
-            //map_agg_oldSeq_newName[globalSeq].push_back(name_sec1);
-
-            // Create vector to store interest name for data retransmission
-            seqName.push_back(name);
-
-            shared_ptr<Name> newName = make_shared<Name>(nameWithType);
-            newName->appendSequenceNumber(globalSeq);
-            SendInterest(newName);
-        }
-
-        globalRound++;
-        if (globalRound == aggregationTree.size()) {
-            globalSeq = ++m_seq;
-            globalRound = 0;
-        }
-    }
-    ScheduleNextPacket();
-}*/
 
 
 
@@ -771,7 +647,7 @@ Consumer::InterestGenerator()
         }
     }
 
-    // ToDo: testing, delete later
+/*  // For testing
     std::cout << "map_round_nameSec1_3: " << std::endl;
     for (const auto& pair : map_round_nameSec1_3) {
         std::cout << "Key: " << pair.first << std::endl;
@@ -791,13 +667,12 @@ Consumer::InterestGenerator()
             std::cout << vec << " ";
         }
         std::cout << std::endl;
-    }
+    }*/
 
     // Generate entire interest name for all iterations
     while (interestQueue.size() <= m_queueSize) {
-        // ToDo: "globalSeq" should start from 1, not 0
+        // Generate new interests for upcoming iteration if necessary
         if (globalSeq <= m_iteNum) {
-            // ToDo: when pushing name into "interestQueue", store them in the format of "std::tuple<uint32_t, bool, shared_ptr<Name>>"
             map_agg_oldSeq_newName[globalSeq] = vec_round;
             m_agg_newDataName[globalSeq] = vec_iteration;
 
@@ -824,7 +699,7 @@ Consumer::InterestGenerator()
 
 
 /**
- * Invoked in SendPacket() function, used to construct interest packet and send it
+ * Called in SendPacket() function, construct interest packet and send it actually
  * @param newName
  */
 void Consumer::SendInterest(shared_ptr<Name> newName)
@@ -886,13 +761,6 @@ Consumer::OnData(shared_ptr<const Data> data)
         std::string name_sec1 = data->getName().get(1).toUri();
         std::string name_sec0 = data->getName().get(0).toUri();
 
-/*        /// Test "m_agg_newDataName", delete later
-        NS_LOG_DEBUG("m_agg_newDataName contains: ");
-        for (const auto& item : m_agg_newDataName.at(seq)) {
-            NS_LOG_DEBUG(item);
-        }
-        std::cout << std::endl;*/
-
         // Perform data name matching with interest name
         ModelData modelData;
         auto data_map = map_agg_oldSeq_newName.find(seq);
@@ -924,7 +792,6 @@ Consumer::OnData(shared_ptr<const Data> data)
 
             // RTT_threshold measurement initialization is done after 5 iterations, before that, don't perform cwnd control
             if (RTT_threshold[roundIndex] != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold[roundIndex]) {
-                // NS_LOG_DEBUG("ECNLocal is set.");
                 ECNLocal = true;
             }
 
@@ -939,39 +806,25 @@ Consumer::OnData(shared_ptr<const Data> data)
 
 
             // This data exist in the map, perform aggregation
-            ///auto& vec = data_map->second;
             auto& aggVec = data_agg->second;
-            ///auto vecIt = std::find(vec.begin(), vec.end(), name_sec1);
             auto aggVecIt = std::find(aggVec.begin(), aggVec.end(), name_sec0);
-            //auto aggVecIt = std::find(aggVec.begin(), aggVec.end(), name_sec1);
-
-            /// Test "aggVecIt", delete later
-            NS_LOG_INFO("aggVecIt element contains: " << name_sec1);
 
             std::vector<uint8_t> oldbuffer(data->getContent().value(), data->getContent().value() + data->getContent().value_size());
 
             if (deserializeModelData(oldbuffer, modelData) && aggVecIt != aggVec.end()) {
                 aggregate(modelData, seq); // Aggregate data payload
                 ECNRemote = !modelData.congestedNodes.empty();
-                ///vec.erase(vecIt);
                 aggVec.erase(aggVecIt);
             } else{
                 NS_LOG_INFO("Data name doesn't exist in map_agg_oldSeq_newName, meaning this data packet is duplicate, do nothing!");
                 return;
             }
 
-
-
-/*            // Check whether aggregation round finished
-            if (vec.empty()) {
-                NS_LOG_DEBUG("Aggregation round finished. ");
-            }*/
-
             // Judge whether the aggregation iteration has finished
             if (aggVec.empty()) {
                 NS_LOG_DEBUG("Aggregation of iteration " << seq << " finished!");
 
-                /// Perform actual aggregation for those data
+                // Get aggregation result and store them
                 aggregationResult[seq] = getMean(seq);
 
                 // Update new elements for interestQueue if necessary
@@ -979,7 +832,7 @@ Consumer::OnData(shared_ptr<const Data> data)
                     InterestGenerator();
                 }
 
-                // Calculate aggregate time
+                // Calculate aggregation time
                 if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
                     aggregateTime[seq] = ns3::Simulator::Now() - aggregateStartTime[seq];
                     AggregateTimeSum(aggregateTime[seq].GetMilliSeconds());
@@ -995,10 +848,10 @@ Consumer::OnData(shared_ptr<const Data> data)
             }
 
             /// Stop simulation
-            if (iteration == m_iteNum) {
+            if (iterationCount == m_iteNum) {
                 NS_LOG_DEBUG("Reach " << m_iteNum << " iterations, stop!");
                 ns3::Simulator::Stop();
-                NS_LOG_INFO("The average aggregation time of Consumer in " << iteration << " iteration is: " << GetAggregateTimeAverage() << " ms");
+                NS_LOG_INFO("The average aggregation time of Consumer in " << iterationCount << " iteration is: " << GetAggregateTimeAverage() << " ms");
                 return;
             }
         } else {
@@ -1031,6 +884,7 @@ Consumer::OnData(shared_ptr<const Data> data)
 /**
  * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
  * @param responseTime
+ * @param index round index
  */
 void
 Consumer::RTTThresholdMeasure(int64_t responseTime, int index)
@@ -1099,6 +953,8 @@ Consumer::RTORecorder()
 /**
  * Record the response time for each returned packet, store them in a file
  * @param responseTime
+ * @param seq sequence number
+ * @param ECN Whether ECN exist in current packet, type is boolean
  */
 void
 Consumer::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN) {

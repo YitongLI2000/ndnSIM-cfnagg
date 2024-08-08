@@ -90,7 +90,7 @@ public:
     // Data aggregation
     void aggregate(const ModelData& data, const uint32_t& seq);
 
-    std::vector<float> getMean(const uint32_t& dataName);
+    std::vector<float> getMean(const uint32_t& seq);
 
     // Calculate aggregate time and response time
     void ResponseTimeSum (int64_t response_time);
@@ -165,7 +165,7 @@ protected:
     std::vector<std::vector<std::string>> globalTreeRound;
     std::map<int, std::vector<int64_t>> RTT_threshold_vec; // Each mapping represents one round (if there're more than one round)
     //std::vector<int64_t> RTT_threshold_vec;
-    std::vector<int64_t> RTT_threshold; // Each mapping represents one round (if there're more than one round)
+    std::vector<int64_t> RTT_threshold; // Each element represents one round (if there's more than one round)
     //int64_t RTT_threshold;
 
     // Global sequence number
@@ -230,9 +230,11 @@ protected:
     std::map<uint32_t, ns3::Time> aggregateStartTime;
     std::map<uint32_t, ns3::Time> aggregateTime;
     int64_t totalAggregateTime;
-    int iteration;
+    int iterationCount;
 
     // For testing purpose, log file
+    // ToDo: Update logging for multiple rounds
+    // ToDo: If possible, add NS_LOG output at last to print some suspicious number
     std::string RTO_recorder = "src/ndnSIM/examples/log/consumer_RTO_periodical.txt";
     std::string responseTime_recorder = "src/ndnSIM/examples/log/consumer_RTT_packet.txt";
     std::string aggregateTime_recorder = "src/ndnSIM/examples/log/consumer_aggregationTime.txt";
