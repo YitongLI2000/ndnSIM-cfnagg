@@ -33,6 +33,9 @@ please refer to official documentation (https://ndnsim.net/current/)
       Enter the number of producers connected with one edge forwarder: 5
       Enter the bit rate: 30Mbps
     ```
-
+- The result graphs (consumer_rtt_aggregationTime.png, consumer_window_rto.png) will be generated under directory
+    ```shell
+  cd ndnSIM/ns-3/src/ndnSIM/experiments/result
+    ```
 
 
