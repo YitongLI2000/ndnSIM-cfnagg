@@ -27,6 +27,7 @@
 #define NFD_DAEMON_TABLE_NAME_TREE_ITERATOR_HPP
 
 #include "name-tree-hashtable.hpp"
+#include <boost/range/iterator_range_core.hpp>
 
 namespace nfd {
 namespace name_tree {

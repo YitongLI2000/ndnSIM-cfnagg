@@ -187,7 +187,7 @@ const property_traits<EdgeWeights>::value_type WeightZero(nullptr, 0, 0.0);
 const property_traits<EdgeWeights>::value_type
   WeightInf(nullptr, std::numeric_limits<uint16_t>::max(), 0.0);
 
-struct WeightCompare : public std::binary_function<property_traits<EdgeWeights>::reference,
+struct WeightCompare : public std::__binary_function<property_traits<EdgeWeights>::reference,
                                                    property_traits<EdgeWeights>::reference, bool> {
   bool
   operator()(std::tuple<std::shared_ptr<nfd::Face>, uint32_t, double> a,
@@ -210,7 +210,7 @@ struct WeightCompare : public std::binary_function<property_traits<EdgeWeights>:
 };
 
 struct WeightCombine
-  : public std::binary_function<uint32_t, property_traits<EdgeWeights>::reference, uint32_t> {
+  : public std::__binary_function<uint32_t, property_traits<EdgeWeights>::reference, uint32_t> {
   uint32_t
   operator()(uint32_t a, property_traits<EdgeWeights>::reference b) const
   {
