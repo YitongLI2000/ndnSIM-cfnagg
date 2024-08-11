@@ -8,7 +8,7 @@ please refer to official documentation (https://ndnsim.net/current/)
 
 ## How to build this project
 
-- Make sure you've installed all prerequisites for ndnSIM (please refer to https://ndnsim.net/current/getting-started.html)
+- Make sure you've followed all ***prerequisites (only need to installed required libraries in this section)*** and configured the environment for ndnSIM (please refer to https://ndnsim.net/current/getting-started.html)
 - This project needs installation of ***python 3.10***, and currently only tested to work successfully on ***ubuntu 22.04*** and ***Mac OS***
   - Check python 3.10 installation
   ```shell
