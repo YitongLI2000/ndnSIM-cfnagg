@@ -1,10 +1,13 @@
+import os
+
 num_core_forwarders = 3
 
 def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bit_rate):
     num_edge_forwarders = (num_producers // num_producers_per_edge) + 1
 
     # open the topology txt file
-    with open("/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/topologies/DataCenterTopology.txt", "w") as output_file:
+    # with open("/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/topologies/DataCenterTopology.txt", "w") as output_file:
+    with open("../examples/topologies/DataCenterTopology.txt", "w") as output_file:
         # write "router" section
         output_file.write("router\n\n")
         output_file.write("con0\n")
@@ -42,6 +45,8 @@ def main():
     num_aggregators = int(input("Enter the number of aggregators: "))
     number_producer_per_edge = int(input("Enter the number of producers connected with one edge forwarder: "))
     bit_rate = input("Enter the bit rate: ")
+
+    print("Current Working Directory:", os.getcwd())
 
     generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate)
 

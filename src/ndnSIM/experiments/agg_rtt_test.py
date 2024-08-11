@@ -23,7 +23,7 @@ def draw_rtt_graphs(file):
         plt.grid(True)
 
         # Save the plot with a dynamic name based on the file
-        output_path = os.path.join(os.path.dirname(file), f"/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/experiments/result/{os.path.basename(file).split('.')[0]}.png")
+        output_path = os.path.join(os.path.dirname(file), f"./result/{os.path.basename(file).split('.')[0]}.png")
         plt.savefig(output_path)
         plt.close()
 
@@ -32,10 +32,10 @@ def draw_rtt_graphs(file):
         return f"An error occurred: {str(e)}"
 
 def main():
-    log_folder = "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/log/"
+    log_folder = "../examples/log/"
     aggregator_files = glob.glob(os.path.join(log_folder, "agg*_RTT.txt"))
 
-    print("Found aggregator files:", aggregator_files)
+    # print("Found aggregator files:", aggregator_files)
 
     results = []
     for file in aggregator_files:

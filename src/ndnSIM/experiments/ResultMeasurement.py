@@ -41,7 +41,7 @@ def Consumer_rtt_aggregationTime(file1, file2):
 
         plt.title("Consumer: RTT vs. Aggregation time")
         plt.grid(True)
-        plt.savefig("/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/experiments/result/consumer_rtt_aggregationTime.png")
+        plt.savefig("./result/consumer_rtt_aggregationTime.png")
         plt.close()
 
         return "Plot created and saved successfully."
@@ -91,7 +91,7 @@ def Consumer_window_rto(file1, file2):
 
         plt.title("Consumer: Window vs. RTO")
         plt.grid(True)
-        plt.savefig("/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/experiments/result/consumer_window_rto.png")
+        plt.savefig("./result/consumer_window_rto.png")
         plt.close()
 
         return "Plot created and saved successfully."
@@ -109,12 +109,12 @@ def main():
     print("Current Working Directory:", os.getcwd())
 
     # Print the list of files in the current directory
-    print("Files in the current directory:", os.listdir())
+    # print("Files in the current directory:", os.listdir())
 
-    file1 = "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/log/consumer_window.txt"
-    file2 = "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/log/consumer_RTO_periodical.txt"
-    file3 = "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/log/consumer_RTT_packet.txt"
-    file4 = "/home/dd/agg-ndnSIM/ns-3/src/ndnSIM/examples/log/consumer_aggregationTime.txt"
+    file1 = "../examples/log/consumer_window.txt"
+    file2 = "../examples/log/consumer_RTO_periodical.txt"
+    file3 = "../examples/log/consumer_RTT_packet.txt"
+    file4 = "../examples/log/consumer_aggregationTime.txt"
 
     # Check if files exist
     print("Checking if file1 exists:", os.path.exists(file1))
