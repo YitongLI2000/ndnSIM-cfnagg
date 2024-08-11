@@ -611,7 +611,7 @@ Aggregator::WindowDecrease(std::string type)
 {
     if (!m_useCwa || m_highData > m_recPoint) {
         const double diff = m_seq - m_highData;
-        BOOST_ASSERT(diff > 0);
+        BOOST_ASSERT(diff >= 0);
 
         m_recPoint = m_seq + (m_addRttSuppress * diff);
 
@@ -867,7 +867,7 @@ Aggregator::SendInterest(shared_ptr<Name> newName)
     m_timeoutCheck[nameWithSeq] = ns3::Simulator::Now();
 
     // Start response time
-    currentTime[nameWithSeq] = ns3::Simulator::Now();
+    startTime[nameWithSeq] = ns3::Simulator::Now();
 
     NS_LOG_INFO("Sending new interest >>>> " << nameWithSeq);
     shared_ptr<Interest> newInterest = make_shared<Interest>();
@@ -929,10 +929,10 @@ Aggregator::OnData(shared_ptr<const Data> data)
         NS_LOG_INFO("Received data name: " << data->getName().toUri());
 
         // Response time computation (RTT)
-        if (currentTime.find(dataName) != currentTime.end()){
-            responseTime[dataName] = ns3::Simulator::Now() - currentTime[dataName];
+        if (startTime.find(dataName) != startTime.end()){
+            responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
             ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
-            currentTime.erase(dataName);
+            startTime.erase(dataName);
         }
 
         // Record RTT

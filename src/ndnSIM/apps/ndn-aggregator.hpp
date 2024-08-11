@@ -223,7 +223,7 @@ protected:
 
 
     // Response/Aggregation time measurement
-    std::map<std::string, ns3::Time> currentTime;
+    std::map<std::string, ns3::Time> startTime;
     std::map<std::string, ns3::Time> responseTime;
     int64_t totalResponseTime;
     int round;

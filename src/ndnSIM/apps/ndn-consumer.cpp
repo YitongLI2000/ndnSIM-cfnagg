@@ -713,8 +713,8 @@ void Consumer::SendInterest(shared_ptr<Name> newName)
     m_timeoutCheck[nameWithSeq] = ns3::Simulator::Now();
 
     // Start response time
-    if (currentTime.find(nameWithSeq) == currentTime.end())
-        currentTime[nameWithSeq] = ns3::Simulator::Now();
+    if (startTime.find(nameWithSeq) == startTime.end())
+        startTime[nameWithSeq] = ns3::Simulator::Now();
 
     shared_ptr<Interest> interest = make_shared<Interest>();
     interest->setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
@@ -758,7 +758,6 @@ Consumer::OnData(shared_ptr<const Data> data)
         NS_LOG_DEBUG("Suspicious data packet, not exists in timeout list.");
 
     if (type == "data") {
-        std::string name_sec1 = data->getName().get(1).toUri();
         std::string name_sec0 = data->getName().get(0).toUri();
 
         // Perform data name matching with interest name
@@ -768,10 +767,10 @@ Consumer::OnData(shared_ptr<const Data> data)
         if (data_map != map_agg_oldSeq_newName.end() && data_agg != m_agg_newDataName.end()) {
 
             // Response time computation (RTT)
-            if (currentTime.find(dataName) != currentTime.end()){
-                responseTime[dataName] = ns3::Simulator::Now() - currentTime[dataName];
+            if (startTime.find(dataName) != startTime.end()){
+                responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
                 ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
-                currentTime.erase(dataName);
+                startTime.erase(dataName);
                 NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
             }
 

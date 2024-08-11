@@ -221,7 +221,7 @@ protected:
     bool ECNRemote;
 
     // defined for response time
-    std::map<std::string, ns3::Time> currentTime;
+    std::map<std::string, ns3::Time> startTime;
     std::map<std::string, ns3::Time> responseTime;
     int64_t total_response_time;
     int round;
