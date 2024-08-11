@@ -9,6 +9,15 @@ please refer to official documentation (https://ndnsim.net/current/)
 ## How to build this project
 
 - Make sure you've installed all prerequisites for ndnSIM (please refer to https://ndnsim.net/current/getting-started.html)
+- This project needs installation of ***python 3.10***, and currently only tested to work successfully on ***ubuntu 22.04*** and ***Mac OS***
+  - Check python 3.10 installation
+  ```shell
+  python3.10 --version 
+  ```
+  - Install ***pandas*** and ***matplotlib*** for python 3.10 
+  ```shell
+  python3.10 -m pip install matplotlib pandas
+  ```
 - Clone the repository
     ```shell
   mkdir ndnSIM
@@ -16,15 +25,21 @@ please refer to official documentation (https://ndnsim.net/current/)
   git clone https://github.com/CasterYT/agg-ndnSIM-8.8.git ns-3
   git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
     ```
-- build ndnSIM
+- Check and specify python3.10 installation path
+  - Check python 3.10 installation path (my python3.10 installation is "/usr/bin/python3.10", 
+  you should change it to your own path)
+  ```shell
+  which python 3.10
+  ```
+- build ndnSIM (change "/usr/bin/python3.10" with your own python3.10 executable path)
     ```shell
   cd ns-3
-  ./waf configure --enable-examples -d debug
+  ./waf configure --with-python=/usr/bin/python3.10 --enable-examples -d debug
   ./waf
     ```
-- Start simulation (make sure you're under ndnSIM/ns-3)
+- Start simulation (make sure you're under ndnSIM/ns-3, and change "/usr/bin/python3.10" with your own python3.10 executable path)
     ```shell
-  ./cfnagg_run.sh
+  ./cfnagg_python3.10_run.sh /usr/bin/python3.10
     ```
     The shell will ask for some input parameters, I show an example in the following:
     ```shell
