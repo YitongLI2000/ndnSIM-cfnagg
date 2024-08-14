@@ -113,11 +113,13 @@ public:
     // For testing purpose, measure the consumer's window
     void WindowRecorder();
 
-    void RTO_Recorder();
+    void RTORecorder();
 
-    void responseTimeRecorder(Time responseTime);
+    void ResponseTimeRecorder(Time responseTime);
 
+    void AggregateTimeRecorder(Time aggregateTime);
 
+    void InitializeLogFile();
 
 
 
@@ -147,6 +149,15 @@ public:
     typedef void (*FirstInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, uint32_t retxCount, int32_t hopCount);
 
 protected:
+    // log file
+    // All logs start to write after synchronization, make sure only the chosen aggregators will generate log files; those aren't chosen will disable this function
+    // ToDo: Start log function after synchronization
+    std::string folderPath = "src/ndnSIM/results/logs";
+    std::string RTO_recorder;
+    std::string window_Recorder;
+    std::string responseTime_recorder;
+    std::string aggregateTime_recorder;
+
     // Tree broadcast synchronization
     bool treeSync;
 
@@ -205,11 +216,6 @@ protected:
     Time RTO_Timer;
     //std::vector<std::string> m_timeoutList;
     boost::circular_buffer<std::string> m_timeoutList; // Currently initialize with size of 100
-
-    // log file
-    std::string RTO_recorder;
-    std::string windowTimeRecorder;
-    std::string responseTime_recorder;
 
     // Aggregation list
     std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // name segments

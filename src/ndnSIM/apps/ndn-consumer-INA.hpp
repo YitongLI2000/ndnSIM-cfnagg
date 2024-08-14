@@ -86,6 +86,7 @@ private:
     // For testing purpose, measure the consumer's window
     void WindowRecorder();
 
+    void InitializeLogFile();
 
 public:
     typedef std::function<void(double)> WindowTraceCallback;
@@ -109,7 +110,7 @@ private:
     bool m_reactToCongestionMarks;
 
     // For testing purpose, consumer window monitor
-    std::string windowTimeRecorder = "src/ndnSIM/examples/log/consumer_window.txt";
+    std::string windowTimeRecorder = folderPath + "/consumer_window.txt";
     EventId windowMonitor;
 
 

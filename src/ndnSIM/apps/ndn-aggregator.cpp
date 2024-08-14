@@ -418,28 +418,27 @@ Aggregator::StartApplication()
     App::StartApplication();
     FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
 
-    // Initialize the synchronization signal
-    //treeSync = false;
 
-    // For testing purpose
-    RTO_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTO.txt";
-    windowTimeRecorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_window.txt";
-    responseTime_recorder = "src/ndnSIM/examples/log/" + m_prefix.toUri() + "_RTT.txt";
+    // ToDo: enable later
+    /*    // For testing purpose
+    RTO_recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_RTO.txt";
+    window_Recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_window.txt";
+    responseTime_recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_RTT.txt";
 
     // Open and immediately close the file in write mode to clear it
     std::ofstream file1(RTO_recorder, std::ios::out);
-    std::ofstream file2(windowTimeRecorder, std::ios::out);
+    std::ofstream file2(window_Recorder, std::ios::out);
     std::ofstream file3(responseTime_recorder, std::ios::out);
     if (!file1.is_open()) {
         std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
         Simulator::Stop();
     }
     if (!file2.is_open()) {
-        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << window_Recorder << std::endl;
         Simulator::Stop();
     }
     if (!file3.is_open()) {
-        std::cerr << "Failed to open thenfile: " << responseTime_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
         Simulator::Stop();
     }
     file1.close(); // Optional here since file will be closed automatically
@@ -447,7 +446,7 @@ Aggregator::StartApplication()
     file3.close();
 
     Simulator::Schedule(MilliSeconds(5), &Aggregator::RTO_Recorder, this);
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);*/
 }
 
 
@@ -757,7 +756,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
         numChild = static_cast<int> (aggregationMap.size());
 
         // testing, delete later!!!!
-        if (aggregationMap.empty())
+/*        if (aggregationMap.empty())
             NS_LOG_DEBUG("aggregationMap is empty!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         else {
             // Print the result mapping
@@ -767,8 +766,22 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
                     NS_LOG_DEBUG(leaf << " ");
                 }
             }
-        }
+        }*/
 
+        // Initialize file name
+        RTO_recorder = folderPath + "/" + m_prefix.toUri() + "_RTO.txt";
+        window_Recorder = folderPath + "/" + m_prefix.toUri() + "_window.txt";
+        responseTime_recorder = folderPath + "/" + m_prefix.toUri() + "_RTT.txt";
+        aggregateTime_recorder = folderPath + "/" + m_prefix.toUri() + "_aggregationTime.txt";
+
+        // Initialize logging session
+        InitializeLogFile();
+
+        // Start recording into logs
+        Simulator::Schedule(MilliSeconds(5), &Aggregator::RTORecorder, this);
+        Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
+
+        // Generate a new data packet to respond to tree broadcasting
         Name dataName(interest->getName());
         auto data = make_shared<Data>();
         data->setName(dataName);
@@ -936,7 +949,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }
 
         // Record RTT
-        responseTimeRecorder(responseTime[dataName]);
+        ResponseTimeRecorder(responseTime[dataName]);
 
         // Reset RetxTimer and timeout interval
         RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
@@ -1024,6 +1037,9 @@ Aggregator::OnData(shared_ptr<const Data> data)
                 NS_LOG_DEBUG("Error when calculating aggregation time, no reference found for seq " << seq);
             }
 
+            // Record aggregation time
+            AggregateTimeRecorder(aggregateTime[seq]);
+
             // Get aggregation result for current iteration
             std::vector<uint8_t> newbuffer;
             serializeModelData(getMean(seq), newbuffer);
@@ -1069,13 +1085,13 @@ void
 Aggregator::WindowRecorder()
 {
     // Open file; on first call, truncate it to delete old content
-    std::ofstream file(windowTimeRecorder, std::ios::app);
+    std::ofstream file(window_Recorder, std::ios::app);
 
     if (file.is_open()) {
         file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << "\n";  // Write text followed by a newline
         file.close();          // Close the file after writing
     } else {
-        std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
+        std::cerr << "Unable to open file: " << window_Recorder << std::endl;
     }
     Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 }
@@ -1086,7 +1102,7 @@ Aggregator::WindowRecorder()
  * Record RTT every 5 ms, and store them in a file
  */
 void
-Aggregator::RTO_Recorder()
+Aggregator::RTORecorder()
 {
     // Open the file using fstream in append mode
     std::ofstream file(RTO_recorder, std::ios::app);
@@ -1101,7 +1117,7 @@ Aggregator::RTO_Recorder()
 
     // Close the file
     file.close();
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTO_Recorder, this);
+    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTORecorder, this);
 }
 
 
@@ -1111,7 +1127,7 @@ Aggregator::RTO_Recorder()
  * @param responseTime
  */
 void
-Aggregator::responseTimeRecorder(Time responseTime) {
+Aggregator::ResponseTimeRecorder(Time responseTime) {
     // Open the file using fstream in append mode
     std::ofstream file(responseTime_recorder, std::ios::app);
 
@@ -1126,6 +1142,47 @@ Aggregator::responseTimeRecorder(Time responseTime) {
     // Close the file
     file.close();
 }
+
+
+
+/**
+ * Record the aggregate time when each iteration finished
+ * @param aggregateTime
+ */
+void
+Aggregator::AggregateTimeRecorder(Time aggregateTime) {
+    // Open the file using fstream in append mode
+    std::ofstream file(aggregateTime_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << aggregateTime_recorder << std::endl;
+        return;
+    }
+
+    // Write aggregation time to file, followed by a new line
+    file << Simulator::Now().GetMilliSeconds() << " " << aggregateTime.GetMilliSeconds() << std::endl;
+
+    file.close();
+}
+
+
+
+/**
+ * Initialize all new log files, called in the beginning of simulation
+ */
+void
+Aggregator::InitializeLogFile()
+{
+    // Check whether the object path exists, if not, create it first
+    CheckDirectoryExist(folderPath);
+
+    // Open the file and clear all contents for all log files
+    OpenFile(RTO_recorder);
+    OpenFile(responseTime_recorder);
+    OpenFile(aggregateTime_recorder);
+    OpenFile(window_Recorder);
+}
+
 
 } // namespace ndn
 } // namespace ns3

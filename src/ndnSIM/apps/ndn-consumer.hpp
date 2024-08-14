@@ -118,6 +118,8 @@ public:
 
     void AggregateTimeRecorder(Time aggregateTime);
 
+    void InitializeLogFile();
+
 
 public:
     typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
@@ -160,6 +162,15 @@ public:
 protected:
     // Topology file name
     std::string filename = "src/ndnSIM/examples/topologies/DataCenterTopology.txt";
+
+    // Testing log file
+    // ToDo: Update logging for multiple rounds
+    // ToDo: If possible, add NS_LOG output at last to print some suspicious number
+    std::string folderPath = "src/ndnSIM/results/logs";
+    std::string RTO_recorder = folderPath + "/consumer_RTO.txt";
+    std::string responseTime_recorder = folderPath + "/consumer_RTT.txt";
+    std::string aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt";
+    int suspiciousPacketCount;
 
     // Congestion/rate control
     std::vector<std::vector<std::string>> globalTreeRound;
@@ -231,14 +242,6 @@ protected:
     std::map<uint32_t, ns3::Time> aggregateTime;
     int64_t totalAggregateTime;
     int iterationCount;
-
-    // For testing purpose, log file
-    // ToDo: Update logging for multiple rounds
-    // ToDo: If possible, add NS_LOG output at last to print some suspicious number
-    std::string RTO_recorder = "src/ndnSIM/examples/log/consumer_RTO_periodical.txt";
-    std::string responseTime_recorder = "src/ndnSIM/examples/log/consumer_RTT_packet.txt";
-    std::string aggregateTime_recorder = "src/ndnSIM/examples/log/consumer_aggregationTime.txt";
-    int suspiciousPacketCount;
 
 
     Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator

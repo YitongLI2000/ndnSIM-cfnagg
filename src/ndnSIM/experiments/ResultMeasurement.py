@@ -3,6 +3,21 @@ import matplotlib.pyplot as plt
 import os
 
 
+
+def check_and_create_dir(path):
+    """
+    Check if the specified directory exists, and create it if it does not.
+
+    :param path: Path to the directory to check and possibly create.
+    :return: None
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
+        print(f"Directory created at: {path}")
+    else:
+        print(f"Directory already exists at: {path}")
+
+
 def Consumer_rtt_aggregationTime(file1, file2):
     """
     Draw a graph for consumer, x: Time y: RTT vs. aggregation time
@@ -41,7 +56,7 @@ def Consumer_rtt_aggregationTime(file1, file2):
 
         plt.title("Consumer: RTT vs. Aggregation time")
         plt.grid(True)
-        plt.savefig("./result/consumer_rtt_aggregationTime.png")
+        plt.savefig("../results/graphs/consumer_rtt_aggregationTime.png")
         plt.close()
 
         return "Plot created and saved successfully."
@@ -91,7 +106,7 @@ def Consumer_window_rto(file1, file2):
 
         plt.title("Consumer: Window vs. RTO")
         plt.grid(True)
-        plt.savefig("./result/consumer_window_rto.png")
+        plt.savefig("../results/graphs/consumer_window_rto.png")
         plt.close()
 
         return "Plot created and saved successfully."
@@ -111,16 +126,20 @@ def main():
     # Print the list of files in the current directory
     # print("Files in the current directory:", os.listdir())
 
-    file1 = "../examples/log/consumer_window.txt"
-    file2 = "../examples/log/consumer_RTO_periodical.txt"
-    file3 = "../examples/log/consumer_RTT_packet.txt"
-    file4 = "../examples/log/consumer_aggregationTime.txt"
+    file1 = "../results/logs/consumer_window.txt"
+    file2 = "../results/logs/consumer_RTO.txt"
+    file3 = "../results/logs/consumer_RTT.txt"
+    file4 = "../results/logs/consumer_aggregationTime.txt"
 
     # Check if files exist
     print("Checking if file1 exists:", os.path.exists(file1))
     print("Checking if file2 exists:", os.path.exists(file2))
     print("Checking if file3 exists:", os.path.exists(file3))
     print("Checking if file4 exists:", os.path.exists(file4))
+
+    # Check whether output path exists
+    output_path = "../results/graphs"
+    check_and_create_dir(output_path)
 
     # Return execution log
     result1 = Consumer_window_rto(file1, file2)

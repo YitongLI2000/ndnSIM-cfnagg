@@ -1,3 +1,5 @@
+src/ndnSIM/results/
+
 *.diff
 *.orig
 *.patch
@@ -84,7 +86,6 @@ massif.*
 \#[^\#/]+\#$
 .lock-wscript
 .lock-wafbuild
-src/ndnSIM
 configure
 toggle
 

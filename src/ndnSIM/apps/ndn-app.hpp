@@ -20,6 +20,7 @@
 #ifndef NDN_APP_H
 #define NDN_APP_H
 
+#include <filesystem> // Added by Yitong
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -90,12 +91,6 @@ public:
   OnNack(shared_ptr<const lp::Nack> nack);
 
 
-    // Old design, need to be deleted later
-  void
-  AddLinkInfo(const std::string& filename);
-
-
-
   // New design to implement algorithm
   void
   ConstructAggregationTree();
@@ -129,6 +124,10 @@ protected:
   getLeafNodes(const std::string& key, const std::map<std::string, std::vector<std::string>>& treeMap);
 
   int findRoundIndex(const std::vector<std::vector<std::string>>& roundVec, const std::string& target);
+
+  void CheckDirectoryExist(const std::string& path);
+
+  void OpenFile(const std::string& filename);
 
 // New design for tree topology to get child node info
 public:

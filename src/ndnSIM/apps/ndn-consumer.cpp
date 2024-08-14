@@ -271,24 +271,8 @@ Consumer::ConstructAggregationTree()
 void
 Consumer::StartApplication() // Called at time specified by Start
 {
-    // Clear the log file
-    std::ofstream file1(RTO_recorder, std::ios::out);
-    if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
-    }
-    file1.close();
-
-    std::ofstream file2(responseTime_recorder, std::ios::out);
-    if (!file2.is_open()) {
-        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
-    }
-    file2.close();
-
-    std::ofstream file3(aggregateTime_recorder, std::ios::out);
-    if (!file3.is_open()) {
-        std::cerr << "Failed to open the file: " << aggregateTime_recorder << std::endl;
-    }
-    file3.close();
+    // Initialize all log files
+    //InitializeLogFile();
 
     Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
 
@@ -799,9 +783,9 @@ Consumer::OnData(shared_ptr<const Data> data)
 
             // Reset RetxTimer and timeout interval
             RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMilliSeconds(), roundIndex);
+            m_timeoutThreshold[roundIndex] = RTO_Timer[roundIndex];
             NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
             NS_LOG_DEBUG("Current RTO measurement: " << RTO_Timer[roundIndex].GetMilliSeconds() << " ms");
-            m_timeoutThreshold[roundIndex] = RTO_Timer[roundIndex];
 
 
             // This data exist in the map, perform aggregation
@@ -992,6 +976,22 @@ Consumer::AggregateTimeRecorder(Time aggregateTime) {
     file << Simulator::Now().GetMilliSeconds() << " " << aggregateTime.GetMilliSeconds() << std::endl;
 
     file.close();
+}
+
+
+/**
+ * Initialize all new log files, called in the beginning of simulation
+ */
+void
+Consumer::InitializeLogFile()
+{
+    // Check whether the object path exists, if not, create it first
+    //CheckDirectoryExist(folderPath);
+
+    // Open the file and clear all contents for all log files
+    OpenFile(RTO_recorder);
+    OpenFile(responseTime_recorder);
+    OpenFile(aggregateTime_recorder);
 }
 
 } // namespace ndn

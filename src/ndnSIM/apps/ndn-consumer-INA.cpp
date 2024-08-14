@@ -97,12 +97,6 @@ ConsumerINA::ConsumerINA()
     , m_alpha(0.6)
     , m_gamma(0.7)
 {
-    // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(windowTimeRecorder, std::ios::out);
-    if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << windowTimeRecorder << std::endl;
-    }
-    file1.close(); // Optional here since file will be closed automatically
 }
 
 
@@ -159,7 +153,11 @@ ConsumerINA::ScheduleNextPacket()
 void
 ConsumerINA::StartApplication()
 {
+    // Initialize log files
+    InitializeLogFile();
+
     Consumer::StartApplication();
+
     windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
 }
 
@@ -337,6 +335,23 @@ ConsumerINA::WindowRecorder()
         std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
     }
     windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
+}
+
+
+
+/**
+ * Initialize log file for "consumer_window.txt"
+ */
+void
+ConsumerINA::InitializeLogFile()
+{
+    // Check whether object path exists, create it if not
+    CheckDirectoryExist(folderPath);
+
+    // Open the file and clear all contents for log file
+    OpenFile(windowTimeRecorder);
+
+    Consumer::InitializeLogFile();
 }
 
 } // namespace ndn
