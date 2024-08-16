@@ -1,6 +1,47 @@
 #!/bin/bash
 
-PYTHON='/usr/bin/python3.10'
+GRAPH_DIR="./src/ndnSIM/results/graphs"
+LOGS_DIR="./src/ndnSIM/results/logs"
+
+# Define function to clear all contents from specific path
+clear_directory() {
+    local directory=$1
+
+    # Check if directory exists
+    if [ -d "$directory" ]; then
+        # Remove all contents within the directory
+        echo "Removing all contents in $directory"
+        rm -rf $directory/*
+
+        # Check if the removal was successful
+        if [ $? -eq 0 ]; then
+            echo "All contents have been removed successfully from $directory."
+        else
+            echo "Failed to remove contents from $directory."
+        fi
+    else
+        echo "Directory does not exist: $directory, no need for further operation."
+    fi
+}
+
+# Remove everything from specific folders
+clear_directory "$GRAPH_DIR"
+clear_directory "$LOGS_DIR"
+
+
+
+
+# Specify python version
+PYTHON_VERSION="python3.10"
+
+# Use the provided argument to find the Python executable path
+PYTHON=$(which "$PYTHON_VERSION")
+
+# Check if the Python executable was found
+if [ -z "$PYTHON" ]; then
+  echo "Error: Python executable not found for version $PYTHON_VERSION"
+  exit 1
+fi
 
 # Generate corresponding network topology
 cd ./src/ndnSIM/experiments
@@ -12,4 +53,5 @@ NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator ./waf --run agg-aimd-test
 
 # Generate simulation result
 cd ./src/ndnSIM/experiments
-$PYTHON ResultMeasurement.py
+$PYTHON consumer_result_generator.py
+$PYTHON agg_result_generator.py

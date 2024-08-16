@@ -25,21 +25,16 @@ please refer to official documentation (https://ndnsim.net/current/)
   git clone https://github.com/CasterYT/agg-ndnSIM-8.8.git ns-3
   git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
     ```
-- Check and specify python3.10 installation path
-  - Check python 3.10 installation path (my python3.10 installation is "/usr/bin/python3.10", 
-  you should change it to your own path)
-  ```shell
-  which python 3.10
-  ```
-- build ndnSIM (change "/usr/bin/python3.10" with your own python3.10 executable path)
-    ```shell
+- build ndnSIM (If python3.10 can't be found, then you should specify python3.10 executable manually.
+  E.g. "--with-python=/usr/bin/python3.10")
+    ```shell 
   cd ns-3
-  ./waf configure --with-python=/usr/bin/python3.10 --enable-examples -d debug
+  ./waf configure --with-python=python3.10 --enable-examples -d debug
   ./waf
     ```
-- Start simulation (make sure you're under ndnSIM/ns-3, and change "/usr/bin/python3.10" with your own python3.10 executable path)
+- Start simulation (make sure you're under ndnSIM/ns-3, and specify "python3.10" as input parameter for execution)
     ```shell
-  ./cfnagg_python3.10_run.sh /usr/bin/python3.10
+  ./cfnagg_python3.10_run.sh python3.10
     ```
     The shell will ask for some input parameters, I show an example in the following:
     ```shell
