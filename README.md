@@ -22,7 +22,7 @@ please refer to official documentation (https://ndnsim.net/current/)
   ```shell
   mkdir ndnSIM
   cd ndnSIM
-  git clone https://github.com/CasterYT/agg-ndnSIM-8.8.git ns-3
+  git clone https://github.com/YitongLI2000/ndnSIM-cfnagg.git ns-3
   git clone https://github.com/named-data-ndnSIM/pybindgen.git pybindgen
   ```
 - build ndnSIM (If python3.10 can't be found, then you should specify python3.10 executable manually.
