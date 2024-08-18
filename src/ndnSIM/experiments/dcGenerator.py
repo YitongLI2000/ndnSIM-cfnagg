@@ -1,6 +1,16 @@
 import os
+import sys
+import re
+import configparser
 
 num_core_forwarders = 3
+
+
+
+
+def is_valid_bitrate(bitrate):
+    pattern = re.compile(r"^\d+(Kbps|Mbps|Gbps|bps)$")
+    return pattern.match(bitrate) is not None
 
 def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bit_rate):
     num_edge_forwarders = (num_producers // num_producers_per_edge) + 1
@@ -41,12 +51,19 @@ def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bi
 
 
 def main():
-    num_producers = int(input("Enter the number of producers: "))
-    num_aggregators = int(input("Enter the number of aggregators: "))
-    number_producer_per_edge = int(input("Enter the number of producers connected with one edge forwarder: "))
-    bit_rate = input("Enter the bit rate: ")
+    # Read information from config.ini
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    num_producers = int(config['DCNTopology']['numProducer'])
+    num_aggregators = int(config['DCNTopology']['numAggregator'])
+    number_producer_per_edge = int(config['DCNTopology']['numEdgeForwarder'])
+    bit_rate = config['DCNTopology']['Bitrate']
 
     print("Current Working Directory:", os.getcwd())
+
+    if not is_valid_bitrate(bit_rate):
+        print(f"Error! Bitrate '{bit_rate}' is not in the correct format.")
+        sys.exit(1)
 
     generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate)
 

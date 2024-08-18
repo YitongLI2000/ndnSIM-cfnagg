@@ -15,6 +15,11 @@
  *
  * You should have received a copy of the GNU General Public License along with
  * ndnSIM, e.g., in COPYING.md file.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ *
+ * Main structure is modified by Yitong, new functions are added for CFNAgg
+ * This class implements all functions for CFNAgg, except for cwnd management/congestion control mechanism.
+ * Those parts are implemented in "ndn-consumer-INA"
  **/
 
 #include <fstream>
@@ -86,6 +91,8 @@ Consumer::GetTypeId(void)
                     MakeIntegerAccessor(&Consumer::m_iteNum), MakeIntegerChecker<int32_t>())
       .AddAttribute("InterestQueue", "The size of interest queue", IntegerValue(300),
                     MakeIntegerAccessor(&Consumer::m_queueSize), MakeIntegerChecker<int64_t>())
+      .AddAttribute("Constraint", "Constraint of aggregation tree construction", IntegerValue(5),
+                    MakeIntegerAccessor(&Consumer::m_constraint), MakeIntegerChecker<int>())
       .AddAttribute("RetxTimer",
                     "Timeout defining how frequent retransmission timeouts should be checked",
                     StringValue("50ms"),
@@ -172,13 +179,12 @@ Consumer::ConstructAggregationTree()
 {
     App::ConstructAggregationTree();
     AggregationTree tree(filename);
-    int C = 5;
     std::vector<std::string> dataPointNames = Utility::getProducers(filename);
     std::map<std::string, std::vector<std::string>> rawAggregationTree;
     std::vector<std::vector<std::string>> rawSubTree;
 
 
-    if (tree.aggregationTreeConstruction(dataPointNames, C)) {
+    if (tree.aggregationTreeConstruction(dataPointNames, m_constraint)) {
         rawAggregationTree = tree.aggregationAllocation;
         rawSubTree = tree.noCHTree;
     } else {

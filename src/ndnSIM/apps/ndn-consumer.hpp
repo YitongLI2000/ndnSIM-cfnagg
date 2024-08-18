@@ -260,6 +260,7 @@ protected:
     std::string m_nodeprefix; // Consumer's node prefix
     uint32_t m_iteNum; // The number of iterations
     int64_t m_queueSize; // Queue size
+    int m_constraint; // Constraint of each sub-tree
 
     /// @cond include_hidden
       /**

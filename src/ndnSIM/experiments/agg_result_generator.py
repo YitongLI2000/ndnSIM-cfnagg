@@ -62,7 +62,8 @@ def aggregator_rto_aggregationtime(file1, file2):
         plt.savefig(rtt_path, dpi=300)
         plt.close()
 
-        return f"Individual rto and aggregation time graph for {aggname} are created and saved successfully."
+        # return f"Individual rto and aggregation time graph for {aggname} are created and saved successfully."
+        return "success"
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
@@ -136,7 +137,8 @@ def aggregator_window_rtt(file1, file2):
         plt.savefig(rtt_path, dpi=300)
         plt.close()
 
-        return f"Combined/individual window and rtt graph for {aggname} are created and saved successfully."
+        # return f"Combined/individual window and rtt graph for {aggname} are created and saved successfully."
+        return "success"
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
@@ -170,21 +172,32 @@ def main():
     dict_rto = {os.path.basename(f).split('_')[0]: f for f in files_rto} # {"agg*", rto_file_path}
     dict_aggregationtime = {os.path.basename(f).split('_')[0]: f for f in files_aggregationtime} # {"agg*", aggregationtime_file_path}
 
+    error_occurred = False
+    all_success = True
+
     for agg_id, rtt_file in dict_rtt.items():
         window_file = dict_window.get(agg_id)
         rto_file = dict_rto.get(agg_id)
         aggregationtime_file = dict_aggregationtime.get(agg_id)
-        if window_file:
-            result = aggregator_window_rtt(window_file, rtt_file)
-            print(result)
-        else:
-            print(f"No matching window file found for {window_file}/{rtt_file}")
+        if rtt_file and window_file and rto_file and aggregationtime_file:
+            result_window_rtt = aggregator_window_rtt(window_file, rtt_file)
+            result_rto_aggregationtime = aggregator_rto_aggregationtime(rto_file, aggregationtime_file)
 
-        if rto_file and aggregationtime_file:
-            result = aggregator_rto_aggregationtime(rto_file, aggregationtime_file)
-            print(result)
+            if result_window_rtt != "success":
+                print(result_window_rtt)
+                error_occurred = True
+
+            if result_rto_aggregationtime != "success":
+                print(result_rto_aggregationtime)
+                error_occurred = True
         else:
-            print(f"No matching window file found for {rto_file}/{aggregationtime_file}")
+            print("Error, no matching files when searching in dictionary files.")
+            error_occurred = True
+        all_success = all_success and not error_occurred
+
+    if all_success:
+        print("All aggregator result graphs are generated successfully.")
+
 
 if __name__ == "__main__":
     main()

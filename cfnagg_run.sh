@@ -28,9 +28,6 @@ clear_directory() {
 clear_directory "$GRAPH_DIR"
 clear_directory "$LOGS_DIR"
 
-
-
-
 # Specify python version
 PYTHON_VERSION="python3.10"
 
@@ -43,9 +40,24 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
-# Generate corresponding network topology
+# Generate corresponding network topology, DCN
 cd ./src/ndnSIM/experiments
-$PYTHON dcGenerator.py
+CONFIG_FILE="config.ini"
+TOPOLOGY_TYPE=$(grep "TopologyType" $CONFIG_FILE | awk -F "= " '{print $2}')
+
+if [ "$TOPOLOGY_TYPE" == "DCN" ]; then
+    echo "TopologyType is DCN. Generating DC network..."
+    $PYTHON dcGenerator.py
+else
+    echo "TopologyType is not DCN." # Replace it with another ISP network later
+fi
+
+# Check whether topology is generated successfully
+if [ $? -ne 0 ]; then
+    echo "Fail to generate topology, please check all input parameters!"
+    exit 1
+fi
+
 cd ../../../
 
 # Start simulation

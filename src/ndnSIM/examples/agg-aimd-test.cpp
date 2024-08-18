@@ -45,7 +45,8 @@ namespace ns3 {
             if (nodeName.find("con") == 0) {
                 // Install ConsumerCbr on consumer nodes
                 ndn::AppHelper consumerHelper("ns3::ndn::ConsumerINA");
-                consumerHelper.SetAttribute("Iteration", IntegerValue(400));
+                consumerHelper.SetAttribute("Iteration", IntegerValue(100));
+                consumerHelper.SetAttribute("Constraint", IntegerValue(5));
                 consumerHelper.SetAttribute("Window", StringValue("1"));
                 consumerHelper.SetAttribute("UseCwa", BooleanValue(false));
                 consumerHelper.SetAttribute("NodePrefix", StringValue("con0"));

@@ -1,6 +1,9 @@
-//
-// Created by 李怿曈 on 16/4/2024.
-//
+/**
+ *  This class is written by Yitong, serves as aggregator in CFNAgg
+ * This class implements all functions for CFNAgg, which is slightly different from consumer
+ * (aggregators serve as intermediate nodes, while consumer is the end node to generate new interests)
+ *
+ */
 
 #include "ndn-aggregator.hpp"
 #include "model/ndn-l3-protocol.hpp"
