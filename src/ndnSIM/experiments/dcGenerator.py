@@ -62,7 +62,7 @@ def main():
     print("Current Working Directory:", os.getcwd())
 
     if not is_valid_bitrate(bit_rate):
-        print(f"Error! Bitrate '{bit_rate}' is not in the correct format.")
+        print(f"Error! Bitrate '{bit_rate}' is not in the correct format. Only the following format is allowed:\n1bps, 1Kbps, 1Mbps, 1Gbps")
         sys.exit(1)
 
     generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate)

@@ -3,12 +3,25 @@
 #include "ns3/ndnSIM-module.h"
 #include "ns3/error-model.h"
 
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+#include <iostream>
+#include <string>
+
 namespace ns3 {
 
     void PacketDropCallback(std::string context, Ptr<const Packet> packet){
         uint32_t droppedPacket = 0;
         droppedPacket++;
         std::cout << "Packet dropped! Total dropped packets: " << droppedPacket << std::endl;
+    }
+
+    int GetConstraint() {
+        boost::property_tree::ptree pt;
+        boost::property_tree::ini_parser::read_ini("src/ndnSIM/experiments/config.ini", pt);
+
+        int constraint = pt.get<int>("General.Constraint");
+        return constraint;
     }
 
     int
@@ -38,6 +51,9 @@ namespace ns3 {
         // Add packet drop tracing to all nodes
         Config::Connect("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/PhyRxDrop", MakeCallback(&PacketDropCallback));
 
+        // Get constraint from config.ini
+        int constraint = GetConstraint();
+
         for (NodeContainer::Iterator i = NodeList::Begin(); i != NodeList::End(); ++i) {
             Ptr<Node> node = *i;
             std::string nodeName = Names::FindName(node);
@@ -46,7 +62,7 @@ namespace ns3 {
                 // Install ConsumerCbr on consumer nodes
                 ndn::AppHelper consumerHelper("ns3::ndn::ConsumerINA");
                 consumerHelper.SetAttribute("Iteration", IntegerValue(100));
-                consumerHelper.SetAttribute("Constraint", IntegerValue(5));
+                consumerHelper.SetAttribute("Constraint", IntegerValue(constraint));
                 consumerHelper.SetAttribute("Window", StringValue("1"));
                 consumerHelper.SetAttribute("UseCwa", BooleanValue(false));
                 consumerHelper.SetAttribute("NodePrefix", StringValue("con0"));
