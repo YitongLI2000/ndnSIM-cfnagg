@@ -115,7 +115,7 @@ public:
 
     void RTORecorder();
 
-    void ResponseTimeRecorder(Time responseTime);
+    void ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_actual);
 
     void AggregateTimeRecorder(Time aggregateTime);
 
@@ -151,7 +151,6 @@ public:
 protected:
     // log file
     // All logs start to write after synchronization, make sure only the chosen aggregators will generate log files; those aren't chosen will disable this function
-    // ToDo: Start log function after synchronization
     std::string folderPath = "src/ndnSIM/results/logs";
     std::string RTO_recorder;
     std::string window_Recorder;
@@ -164,7 +163,11 @@ protected:
     // Congestion control, measure RTT threshold to detect congestion
     int numChild;
     std::vector<int64_t> RTT_threshold_vec;
-    int64_t RTT_threshold;
+    int64_t RTT_threshold; // Actual threshold used to detect congestion
+    int64_t RTT_measurement; // The estimated RTT value using EWMA
+    int RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
+    float RTT_a; // Factor used in EWMA, recommended value is between 0.1 and 0.3
+    float Threshold_factor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
 
     // Congestion signal
     bool ECNLocal;
@@ -181,9 +184,11 @@ protected:
     bool m_useCwa;
     uint32_t m_highData;
     double m_recPoint;
-    double m_beta;
-    double m_alpha;
-    double m_gamma;
+    double m_alpha; // Timeout decrease factor
+    double m_beta; // Local congestion decrease factor
+    double m_gamma; // Remote congestion decrease factor
+    double m_EWMAFactor; // Factor used in EWMA, recommended value is between 0.1 and 0.3
+    double m_thresholdFactor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
 
@@ -204,7 +209,6 @@ protected:
 
 
     // Interest queue definition (interest name)
-    //std::queue<shared_ptr<Name>> interestQueue;
     std::queue<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestQueue;
 
     // Timeout check and RTT measurement
@@ -214,7 +218,9 @@ protected:
     int64_t RTTVAR;
     int roundRTT;
     Time RTO_Timer;
-    //std::vector<std::string> m_timeoutList;
+    int numTimeout;
+
+    // This one is used to make sure duplicate retransmission request from upper tier will be ignored
     boost::circular_buffer<std::string> m_timeoutList; // Currently initialize with size of 100
 
     // Aggregation list

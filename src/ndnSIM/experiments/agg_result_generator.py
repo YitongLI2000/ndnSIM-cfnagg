@@ -21,7 +21,7 @@ def check_and_create_dir(path):
 def aggregator_rto_aggregationtime(file1, file2):
     """
     Draw graph for aggregator, x: Time y: RTO/Aggregation time
-    Two graphs are drown, two individual graphs for RTO/Aggregation time
+    Two graphs are drawn, two individual graphs for RTO/Aggregation time
 
     :param file1: file contains Time, RTO
     :param file2: File contains Time, Aggregation time
@@ -73,7 +73,7 @@ def aggregator_rto_aggregationtime(file1, file2):
 def aggregator_window_rtt(file1, file2):
     """
     Draw graph for aggregator, x: Time y: Window vs. RTT
-    Three graphs are drown, combined graph for Window vs. RTT; two individual graphs for Window/RTT
+    Three graphs are drawn, combined graph for Window vs. RTT; two individual graphs for Window/RTT
 
     :param file1: file contains Time, Window
     :param file2: File contains Time, RTT
@@ -84,7 +84,7 @@ def aggregator_window_rtt(file1, file2):
         data1 = pd.read_csv(file1, sep="\s+", header=None)
         data1.columns = ['Time', 'Window']
 
-        data2 = pd.read_csv(file2, sep="\s+", header=None)
+        data2 = pd.read_csv(file2, sep="\s+", header=None, usecols=[0, 4])
         data2.columns = ['Time', 'RTT']
 
         fig, ax1 = plt.subplots(figsize=(10, 6))

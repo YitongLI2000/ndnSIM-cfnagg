@@ -79,20 +79,51 @@ Consumer::GetTypeId(void)
       .SetGroupName("Ndn")
       .SetParent<App>()
 
-      .AddAttribute("StartSeq", "Initial sequence number", IntegerValue(0),
-                    MakeIntegerAccessor(&Consumer::m_seq), MakeIntegerChecker<int32_t>())
-      .AddAttribute("Prefix", "Name of the Interest", StringValue(),
-                    MakeStringAccessor(&Consumer::m_interestName), MakeStringChecker())
-      .AddAttribute("NodePrefix", "Node prefix", StringValue(),
-                    MakeStringAccessor(&Consumer::m_nodeprefix), MakeStringChecker())
-      .AddAttribute("LifeTime", "LifeTime for interest packet", StringValue("4s"),
-                    MakeTimeAccessor(&Consumer::m_interestLifeTime), MakeTimeChecker())
-      .AddAttribute("Iteration", "The number of iterations to run in the simulation", IntegerValue(200),
-                    MakeIntegerAccessor(&Consumer::m_iteNum), MakeIntegerChecker<int32_t>())
-      .AddAttribute("InterestQueue", "The size of interest queue", IntegerValue(300),
-                    MakeIntegerAccessor(&Consumer::m_queueSize), MakeIntegerChecker<int64_t>())
-      .AddAttribute("Constraint", "Constraint of aggregation tree construction", IntegerValue(5),
-                    MakeIntegerAccessor(&Consumer::m_constraint), MakeIntegerChecker<int>())
+      .AddAttribute("StartSeq",
+                    "Initial sequence number",
+                    IntegerValue(0),
+                    MakeIntegerAccessor(&Consumer::m_seq),
+                    MakeIntegerChecker<int32_t>())
+      .AddAttribute("Prefix",
+                    "Name of the Interest",
+                    StringValue(),
+                    MakeStringAccessor(&Consumer::m_interestName),
+                    MakeStringChecker())
+      .AddAttribute("NodePrefix",
+                    "Node prefix",
+                    StringValue(),
+                    MakeStringAccessor(&Consumer::m_nodeprefix),
+                    MakeStringChecker())
+      .AddAttribute("LifeTime",
+                    "LifeTime for interest packet",
+                    StringValue("4s"),
+                    MakeTimeAccessor(&Consumer::m_interestLifeTime),
+                    MakeTimeChecker())
+      .AddAttribute("EWMAFactor",
+                    "EWMA factor used when measuring RTT, recommended between 0.1 and 0.3",
+                    DoubleValue(0.3),
+                    MakeDoubleAccessor(&Consumer::m_EWMAFactor),
+                    MakeDoubleChecker<double>())
+      .AddAttribute("ThresholdFactor",
+                    "Factor to compute actual RTT threshold",
+                    DoubleValue(1.2),
+                    MakeDoubleAccessor(&Consumer::m_thresholdFactor),
+                    MakeDoubleChecker<double>())
+      .AddAttribute("Iteration",
+                    "The number of iterations to run in the simulation",
+                    IntegerValue(200),
+                    MakeIntegerAccessor(&Consumer::m_iteNum),
+                    MakeIntegerChecker<int32_t>())
+      .AddAttribute("InterestQueue",
+                    "The size of interest queue",
+                    IntegerValue(300),
+                    MakeIntegerAccessor(&Consumer::m_queueSize),
+                    MakeIntegerChecker<int64_t>())
+      .AddAttribute("Constraint",
+                    "Constraint of aggregation tree construction",
+                    IntegerValue(5),
+                    MakeIntegerAccessor(&Consumer::m_constraint),
+                    MakeIntegerChecker<int>())
       .AddAttribute("RetxTimer",
                     "Timeout defining how frequent retransmission timeouts should be checked",
                     StringValue("50ms"),
@@ -115,7 +146,8 @@ Consumer::GetTypeId(void)
  * Constructor
  */
 Consumer::Consumer()
-    : globalSeq(0)
+    : suspiciousPacketCount(0)
+    , globalSeq(0)
     , globalRound(0)
     , broadcastSync(false)
     , m_rand(CreateObject<UniformRandomVariable>())
@@ -265,7 +297,8 @@ Consumer::ConstructAggregationTree()
         initRTO[i] = false;
         RTO_Timer[i] = 6 * m_retxTimer;
         m_timeoutThreshold[i] = 6 * m_retxTimer;
-        RTT_threshold.push_back(0);
+        RTT_threshold[i] = 0;
+        RTT_count[i] = 0;
     }
  }
 
@@ -417,7 +450,7 @@ void
 Consumer::AggregateTimeSum (int64_t aggregate_time)
 {
     totalAggregateTime += aggregate_time;
-    NS_LOG_DEBUG("totalAggregateTime is: " << totalAggregateTime);
+    //NS_LOG_DEBUG("totalAggregateTime is: " << totalAggregateTime);
     ++iterationCount;
 }
 
@@ -432,7 +465,7 @@ Consumer::GetAggregateTimeAverage()
 {
     if (iterationCount == 0)
     {
-        NS_LOG_DEBUG("Error happened when calculating aggregate time!");
+        NS_LOG_INFO("Error happened when calculating aggregate time!");
         Simulator::Stop();
         return 0;
     }
@@ -465,6 +498,9 @@ Consumer::OnTimeout(std::string nameString)
 {
     shared_ptr<Name> name = make_shared<Name>(nameString);
     SendInterest(name);
+
+    // Add one to "suspiciousPacketCount"
+    suspiciousPacketCount++;
 }
 
 
@@ -532,6 +568,7 @@ Consumer::CheckRetxTimeout()
             if (now - it->second > m_timeoutThreshold[roundIndex]) {
                 std::string name = it->first;
                 it = m_timeoutCheck.erase(it);
+                numTimeout[roundIndex]++;
                 OnTimeout(name);
             } else {
                 ++it;
@@ -774,18 +811,17 @@ Consumer::OnData(shared_ptr<const Data> data)
             NS_LOG_INFO("This packet comes from round " << roundIndex);
 
 
-            // Setup RTT_threshold based on RTT of the first 5 iterations, then update RTT_threshold after each new iteration, finish updating after 100 iterations
-            if (RTT_threshold_vec[roundIndex].size() <= globalTreeRound[roundIndex].size() * 100) {
-                RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds(), roundIndex);
-            }
+            // Setup RTT_threshold based on RTT of the first 5 iterations, then update RTT_threshold after each new iteration based on EWMA
+            // ToDo: What about setting up a initial cwnd to run several iterations, other than start cwnd from 1
+            RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds(), roundIndex);
 
-            // RTT_threshold measurement initialization is done after 5 iterations, before that, don't perform cwnd control
-            if (RTT_threshold[roundIndex] != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold[roundIndex]) {
+            // RTT_threshold measurement initialization is done after 3 iterations, before that, don't perform cwnd control
+            if (RTT_count[roundIndex] >= globalTreeRound[roundIndex].size() * 3 && responseTime[dataName].GetMilliSeconds() > RTT_threshold[roundIndex]) {
                 ECNLocal = true;
             }
 
             // Record response time
-            ResponseTimeRecorder(responseTime[dataName], seq, ECNLocal);
+            ResponseTimeRecorder(responseTime[dataName], seq, ECNLocal, RTT_measurement[roundIndex], RTT_threshold[roundIndex]);
 
             // Reset RetxTimer and timeout interval
             RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMilliSeconds(), roundIndex);
@@ -840,6 +876,7 @@ Consumer::OnData(shared_ptr<const Data> data)
             if (iterationCount == m_iteNum) {
                 NS_LOG_DEBUG("Reach " << m_iteNum << " iterations, stop!");
                 ns3::Simulator::Stop();
+                NS_LOG_INFO("Timeout is triggered " << suspiciousPacketCount << " times.");
                 NS_LOG_INFO("The average aggregation time of Consumer in " << iterationCount << " iteration is: " << GetAggregateTimeAverage() << " ms");
                 return;
             }
@@ -864,7 +901,6 @@ Consumer::OnData(shared_ptr<const Data> data)
             broadcastSync = true;
             NS_LOG_DEBUG("Synchronization of tree broadcasting finished!");
         }
-
     }
 }
 
@@ -872,6 +908,7 @@ Consumer::OnData(shared_ptr<const Data> data)
 
 /**
  * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
+ * Apply Exponentially Weighted Moving Average (EWMA) for RTT Threshold Computation
  * @param responseTime
  * @param index round index
  */
@@ -879,34 +916,18 @@ void
 Consumer::RTTThresholdMeasure(int64_t responseTime, int index)
 {
     int aggregationSize = globalTreeRound[index].size();
-    RTT_threshold_vec[index].push_back(responseTime);
-
-    if (RTT_threshold_vec[index].size() >= 5 * aggregationSize && RTT_threshold_vec[index].size() % aggregationSize == 0) {
-        // Sort the all RTT in ascending order
-        std::sort(RTT_threshold_vec[index].begin(), RTT_threshold_vec[index].end());
-
-        int64_t sum = 0;
-        NS_LOG_DEBUG("Traversing the smallest " << aggregationSize << " elements in RTT_threshold_vec: ");
-        for (int i = 0; i < aggregationSize; i++) {
-            if (RTT_threshold_vec[index][i] != 0) {
-                NS_LOG_INFO(RTT_threshold_vec[index][i] << " ms");
-                sum += RTT_threshold_vec[index][i];
-            } else {
-                NS_LOG_INFO("Error. RTT equals to 0, please check!");
-                Simulator::Stop();
-            }
-
-        }
-        RTT_threshold[index] = 2 * (sum / aggregationSize); // threshold factors
-
-        if (RTT_threshold[index] != 0) {
-            NS_LOG_INFO("RTT_threshold of round " << index <<" is set as: " << RTT_threshold[index] << " ms");
-        } else {
-            NS_LOG_INFO("Error! RTT_threshold is set as 0, please check!");
-            ns3::Simulator::Stop();
-        }
-
+    if (RTT_count[index] == 0) {
+        RTT_measurement[index] = responseTime;
+    } else {
+        RTT_measurement[index] = m_EWMAFactor * responseTime + (1 - m_EWMAFactor) * RTT_measurement[index];
+        RTT_threshold[index] = m_thresholdFactor * RTT_measurement[index];
     }
+
+    if (RTT_count[index] >= aggregationSize * 3) // Whether it's larger than 3 iterations
+    {
+        NS_LOG_INFO("Apply RTT_threshold, current value is: " << RTT_threshold[index]);
+    }
+    RTT_count[index]++;
 }
 
 
@@ -946,7 +967,7 @@ Consumer::RTORecorder()
  * @param ECN Whether ECN exist in current packet, type is boolean
  */
 void
-Consumer::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN) {
+Consumer::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_measure, int64_t threshold_actual) {
     // Open the file using fstream in append mode
     std::ofstream file(responseTime_recorder, std::ios::app);
 
@@ -956,7 +977,7 @@ Consumer::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN) {
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << seq << " " << ECN << " " << responseTime.GetMilliSeconds() << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << seq << " " << ECN << " " << threshold_measure << " " << threshold_actual << " " << responseTime.GetMilliSeconds() << std::endl;
 
     // Close the file
     file.close();

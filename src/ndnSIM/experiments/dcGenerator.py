@@ -6,13 +6,38 @@ import configparser
 num_core_forwarders = 3
 
 
+def is_valid_parameter(input_param):
+    """
+    Check whether input parameter is int
+    :param input_param:
+    :return:
+    """
+    try:
+        int(input_param)
+        return True
+    except ValueError:
+        return False
 
 
 def is_valid_bitrate(bitrate):
+    """
+    Check whether input bitrate in in the correct format
+    :param bitrate: Input bitrate
+    :return:
+    """
     pattern = re.compile(r"^\d+(Kbps|Mbps|Gbps|bps)$")
     return pattern.match(bitrate) is not None
 
+
 def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bit_rate):
+    """
+    Generate DC topology file in .txt format
+    :param num_producers:
+    :param num_aggregators:
+    :param num_producers_per_edge:
+    :param bit_rate:
+    :return:
+    """
     num_edge_forwarders = (num_producers // num_producers_per_edge) + 1
 
     # open the topology txt file
@@ -54,6 +79,23 @@ def main():
     # Read information from config.ini
     config = configparser.ConfigParser()
     config.read('config.ini')
+
+    if not is_valid_parameter(config['DCNTopology']['numProducer']):
+        print(f"Error! Num_producers '{config['DCNTopology']['numProducer']}' is not integer, please check.")
+        sys.exit(1)
+
+    if not is_valid_parameter(config['DCNTopology']['numAggregator']):
+        print(f"Error! Num_aggregators '{config['DCNTopology']['numAggregator']}' is not int, please check.")
+        sys.exit(1)
+
+    if not is_valid_parameter(config['DCNTopology']['numEdgeForwarder']):
+        print(f"Error! Number_producer_per_edge '{config['DCNTopology']['numEdgeForwarder']}' is not int, please check.")
+        sys.exit(1)
+
+    if not is_valid_bitrate(config['DCNTopology']['Bitrate']):
+        print(f"Error! Bitrate '{config['DCNTopology']['Bitrate']}' is not in the correct format. Only the following format is allowed:\n1bps, 1Kbps, 1Mbps, 1Gbps")
+        sys.exit(1)
+
     num_producers = int(config['DCNTopology']['numProducer'])
     num_aggregators = int(config['DCNTopology']['numAggregator'])
     number_producer_per_edge = int(config['DCNTopology']['numEdgeForwarder'])
@@ -61,13 +103,14 @@ def main():
 
     print("Current Working Directory:", os.getcwd())
 
-    if not is_valid_bitrate(bit_rate):
-        print(f"Error! Bitrate '{bit_rate}' is not in the correct format. Only the following format is allowed:\n1bps, 1Kbps, 1Mbps, 1Gbps")
-        sys.exit(1)
+
+
+
 
     generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate)
 
     print("Topology generated successfully!")
+
 
 if __name__ == "__main__":
     main()

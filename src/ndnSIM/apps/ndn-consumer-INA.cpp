@@ -46,33 +46,39 @@ ConsumerINA::GetTypeId()
       .SetParent<Consumer>()
       .AddConstructor<ConsumerINA>()
 
-      .AddAttribute("Beta",
+      .AddAttribute("Alpha",
                     "TCP Multiplicative Decrease factor",
                     DoubleValue(0.5),
+                    MakeDoubleAccessor(&ConsumerINA::m_alpha),
+                    MakeDoubleChecker<double>())
+      .AddAttribute("Beta",
+                    "Local congestion decrease factor",
+                    DoubleValue(0.6),
                     MakeDoubleAccessor(&ConsumerINA::m_beta),
                     MakeDoubleChecker<double>())
-
+      .AddAttribute("Gamma",
+                    "Remote congestion decrease factor",
+                    DoubleValue(0.7),
+                    MakeDoubleAccessor(&ConsumerINA::m_gamma),
+                    MakeDoubleChecker<double>())
       .AddAttribute("AddRttSuppress",
                     "Minimum number of RTTs (1 + this factor) between window decreases",
                     DoubleValue(0.5), // This default value was chosen after manual testing
                     MakeDoubleAccessor(&ConsumerINA::m_addRttSuppress),
                     MakeDoubleChecker<double>())
-
       .AddAttribute("ReactToCongestionMarks",
                     "If true, process received congestion marks",
                     BooleanValue(true),
                     MakeBooleanAccessor(&ConsumerINA::m_reactToCongestionMarks),
                     MakeBooleanChecker())
-
       .AddAttribute("UseCwa",
                     "If true, use Conservative Window Adaptation",
-                    BooleanValue(true),
+                    BooleanValue(false),
                     MakeBooleanAccessor(&ConsumerINA::m_useCwa),
                     MakeBooleanChecker())
       .AddAttribute("Window", "Initial size of the window", StringValue("1"),
                     MakeUintegerAccessor(&ConsumerINA::GetWindow, &ConsumerINA::SetWindow),
                     MakeUintegerChecker<uint32_t>())
-
       .AddAttribute("InitialWindowOnTimeout", "Set window to initial value when timeout occurs",
                     BooleanValue(true),
                     MakeBooleanAccessor(&ConsumerINA::m_setInitialWindowOnTimeout),
@@ -84,7 +90,6 @@ ConsumerINA::GetTypeId()
       .AddTraceSource("InFlight", "Current number of outstanding interests",
                       MakeTraceSourceAccessor(&ConsumerINA::m_inFlight),
                       "ns3::ndn::ConsumerINA::WindowTraceCallback");
-
   return tid;
 }
 
@@ -98,8 +103,6 @@ ConsumerINA::ConsumerINA()
     , m_ssthresh(std::numeric_limits<double>::max())
     , m_highData(0)
     , m_recPoint(0.0)
-    , m_alpha(0.6)
-    , m_gamma(0.7)
 {
 }
 
@@ -161,8 +164,6 @@ ConsumerINA::StartApplication()
     InitializeLogFile();
 
     Consumer::StartApplication();
-
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
 }
 
 
@@ -215,6 +216,9 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
     }
 
     NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
+
+    // Record cwnd
+    WindowRecorder();
 
     ScheduleNextPacket();
 }
@@ -290,6 +294,7 @@ void
 ConsumerINA::WindowDecrease(std::string type)
 {
     if (!m_useCwa || m_highData > m_recPoint) {
+        // ToDo: "m_seq" is pending modification, it needs to be modified into the one recording current max seq that has been sent out
         const double diff = m_seq - m_highData;
         BOOST_ASSERT(diff >= 0);
 
@@ -297,11 +302,11 @@ ConsumerINA::WindowDecrease(std::string type)
 
         // AIMD for timeout
         if (type == "timeout") {
-            m_ssthresh = m_window * m_beta;
+            m_ssthresh = m_window * m_alpha;
             m_window = m_ssthresh;
         }
         else if (type == "ConsumerCongestion") {
-            m_ssthresh = m_window * m_alpha;
+            m_ssthresh = m_window * m_beta;
             m_window = m_ssthresh;
         }
         else if (type == "AggregatorCongestion") {
@@ -332,13 +337,14 @@ ConsumerINA::WindowRecorder()
     // Open file; on first call, truncate it to delete old content
     std::ofstream file(windowTimeRecorder, std::ios::app);
 
-    if (file.is_open()) {
-        file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << "\n";  // Write text followed by a newline
-        file.close();          // Close the file after writing
-    } else {
-        std::cerr << "Unable to open file: " << windowTimeRecorder << std::endl;
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        return;
     }
-    windowMonitor = Simulator::Schedule(MilliSeconds(5), &ConsumerINA::WindowRecorder, this);
+
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << std::endl;
+
+    file.close();
 }
 
 

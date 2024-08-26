@@ -111,10 +111,11 @@ public:
     // Based on response time, measure RTT for each round
     Time RTOMeasurement(int64_t resTime, int roundIndex);
 
-    // Print results in files, for testing purpose only
+    // Record results in files, for testing purpose only
     void RTORecorder();
 
-    void ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN);
+    // Record RTT of each packet and some other relevant info
+    void ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_measure, int64_t threshold_actual);
 
     void AggregateTimeRecorder(Time aggregateTime);
 
@@ -165,19 +166,18 @@ protected:
 
     // Testing log file
     // ToDo: Update logging for multiple rounds
-    // ToDo: If possible, add NS_LOG output at last to print some suspicious number
     std::string folderPath = "src/ndnSIM/results/logs";
     std::string RTO_recorder = folderPath + "/consumer_RTO.txt";
     std::string responseTime_recorder = folderPath + "/consumer_RTT.txt";
     std::string aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt";
-    int suspiciousPacketCount;
+    int suspiciousPacketCount; // When timeout is triggered, add one
 
     // Congestion/rate control
     std::vector<std::vector<std::string>> globalTreeRound;
     std::map<int, std::vector<int64_t>> RTT_threshold_vec; // Each mapping represents one round (if there're more than one round)
-    //std::vector<int64_t> RTT_threshold_vec;
-    std::vector<int64_t> RTT_threshold; // Each element represents one round (if there's more than one round)
-    //int64_t RTT_threshold;
+    std::map<int, int64_t> RTT_threshold; // Actual threshold used to detect congestion
+    std::map<int, int64_t> RTT_measurement; // The estimated RTT value using EWMA
+    std::map<int, int> RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
 
     // Global sequence number
     uint32_t globalSeq;
@@ -210,16 +210,12 @@ protected:
 
     // Timeout check/ RTO measurement
     std::map<std::string, ns3::Time> m_timeoutCheck;
-    //std::map<shared_ptr<Name>, ns3::Time> m_timeoutCheck;
     std::map<int, Time> m_timeoutThreshold;
-    //Time RTO_Timer;
     std::map<int, Time> RTO_Timer;
-    //int64_t SRTT;
     std::map<int, int64_t> SRTT;
-    //int64_t RTTVAR;
     std::map<int, int64_t> RTTVAR;
-    //int roundRTT;
     std::map<int, bool> initRTO;
+    std::map<int, int> numTimeout; // Count the number of timeout, for testing purpose
 
 
     // Designed for actual aggregation operations
@@ -243,6 +239,15 @@ protected:
     int64_t totalAggregateTime;
     int iterationCount;
 
+    // New defined attribute variables
+    std::string m_interestName; // Consumer's interest prefix
+    std::string m_nodeprefix; // Consumer's node prefix
+    uint32_t m_iteNum; // The number of iterations
+    int64_t m_queueSize; // Queue size
+    int m_constraint; // Constraint of each sub-tree
+    double m_EWMAFactor; // Factor used in EWMA, recommended value is between 0.1 and 0.3
+    double m_thresholdFactor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
+
 
     Ptr<UniformRandomVariable> m_rand; ///< @brief nonce generator
     uint32_t m_seq;      ///< @brief currently requested sequence number
@@ -256,11 +261,7 @@ protected:
     Time m_offTime;          ///< \brief Time interval between packets
     Time m_interestLifeTime; ///< \brief LifeTime for interest packet
 
-    std::string m_interestName; // Consumer's interest prefix
-    std::string m_nodeprefix; // Consumer's node prefix
-    uint32_t m_iteNum; // The number of iterations
-    int64_t m_queueSize; // Queue size
-    int m_constraint; // Constraint of each sub-tree
+
 
     /// @cond include_hidden
       /**

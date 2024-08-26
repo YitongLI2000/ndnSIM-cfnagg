@@ -103,9 +103,9 @@ private:
     bool m_useCwa;
     uint32_t m_highData;
     double m_recPoint;
-    double m_beta;
-    double m_alpha;
-    double m_gamma;
+    double m_alpha; // Timeout decrease factor
+    double m_beta; // Local congestion decrease factor
+    double m_gamma; // Remote congestion decrease factor
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
 

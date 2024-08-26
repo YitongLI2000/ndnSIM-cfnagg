@@ -50,6 +50,7 @@ if [ "$TOPOLOGY_TYPE" == "DCN" ]; then
     $PYTHON dcGenerator.py
 else
     echo "TopologyType is not DCN." # Replace it with another ISP network later
+    exit 1
 fi
 
 # Check whether topology is generated successfully

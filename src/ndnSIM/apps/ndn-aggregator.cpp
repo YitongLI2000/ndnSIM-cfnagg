@@ -62,43 +62,83 @@ Aggregator::GetTypeId(void)
             .SetGroupName("Ndn")
             .SetParent<App>()
             .AddConstructor<Aggregator>()
-            .AddAttribute("StartSeq", "Starting sequence number", IntegerValue(0),
-                          MakeIntegerAccessor(&Aggregator::m_seq), MakeIntegerChecker<int32_t>())
-            .AddAttribute("Prefix", "Interest prefix/name", StringValue("/"),
-                          MakeNameAccessor(&Aggregator::m_prefix), MakeNameChecker())
-            .AddAttribute("LifeTime", "Life time for interest packet", StringValue("4s"),
-                          MakeTimeAccessor(&Aggregator::m_interestLifeTime), MakeTimeChecker())
+            .AddAttribute("StartSeq",
+                          "Starting sequence number",
+                          IntegerValue(0),
+                          MakeIntegerAccessor(&Aggregator::m_seq),
+                          MakeIntegerChecker<int32_t>())
+            .AddAttribute("Prefix",
+                          "Interest prefix/name",
+                          StringValue("/"),
+                          MakeNameAccessor(&Aggregator::m_prefix),
+                          MakeNameChecker())
+            .AddAttribute("LifeTime",
+                          "Life time for interest packet",
+                          StringValue("4s"),
+                          MakeTimeAccessor(&Aggregator::m_interestLifeTime),
+                          MakeTimeChecker())
             .AddAttribute("RetxTimer",
                           "Timeout defining how frequent retransmission timeouts should be checked",
                           StringValue("50ms"),
                           MakeTimeAccessor(&Aggregator::GetRetxTimer, &Aggregator::SetRetxTimer),
                           MakeTimeChecker())
-            .AddAttribute("Freshness", "Freshness of data packets, if 0, then unlimited freshness",
-                          TimeValue(Seconds(0)), MakeTimeAccessor(&Aggregator::m_freshness),
+            .AddAttribute("Freshness",
+                          "Freshness of data packets, if 0, then unlimited freshness",
+                          TimeValue(Seconds(0)),
+                          MakeTimeAccessor(&Aggregator::m_freshness),
                           MakeTimeChecker())
-            .AddAttribute("Signature","Fake signature, 0 valid signature (default), other values application-specific",
-                          UintegerValue(0), MakeUintegerAccessor(&Aggregator::m_signature),
+            .AddAttribute("Signature",
+                          "Fake signature, 0 valid signature (default), other values application-specific",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&Aggregator::m_signature),
                           MakeUintegerChecker<uint32_t>())
             .AddAttribute("KeyLocator",
                           "Name to be used for key locator.  If root, then key locator is not used",
-                          NameValue(), MakeNameAccessor(&Aggregator::m_keyLocator), MakeNameChecker())
-            .AddAttribute("Window", "Initial size of the window", StringValue("1"),
+                          NameValue(),
+                          MakeNameAccessor(&Aggregator::m_keyLocator),
+                          MakeNameChecker())
+            .AddAttribute("Window",
+                          "Initial size of the window",
+                          StringValue("1"),
                           MakeUintegerAccessor(&Aggregator::GetWindow, &Aggregator::SetWindow),
                           MakeUintegerChecker<uint32_t>())
-            .AddAttribute("MaxSeq", "Maximum sequence number to request (alternative to Size attribute, "
-                                    "would activate only if Size is -1). "
-                                    "The parameter is activated only if Size negative (not set)",
-                            IntegerValue(std::numeric_limits<uint32_t>::max()),
-                            MakeUintegerAccessor(&Aggregator::GetSeqMax, &Aggregator::SetSeqMax),
-                            MakeUintegerChecker<uint32_t>())
-            .AddAttribute("InitialWindowOnTimeout", "Set window to initial value when timeout occurs",
+            .AddAttribute("MaxSeq",
+                          "Maximum sequence number to request (alternative to Size attribute, would activate only if Size is -1). The parameter is activated only if Size negative (not set)",
+                          IntegerValue(std::numeric_limits<uint32_t>::max()),
+                          MakeUintegerAccessor(&Aggregator::GetSeqMax, &Aggregator::SetSeqMax),
+                          MakeUintegerChecker<uint32_t>())
+            .AddAttribute("InitialWindowOnTimeout",
+                          "Set window to initial value when timeout occurs",
                           BooleanValue(true),
                           MakeBooleanAccessor(&Aggregator::m_setInitialWindowOnTimeout),
                           MakeBooleanChecker())
-            .AddAttribute("Beta", "TCP Multiplicative Decrease factor", DoubleValue(0.5),
+            .AddAttribute("Alpha",
+                          "TCP Multiplicative Decrease factor",
+                          DoubleValue(0.5),
+                          MakeDoubleAccessor(&Aggregator::m_alpha),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("Beta",
+                          "Local congestion decrease factor",
+                          DoubleValue(0.6),
                           MakeDoubleAccessor(&Aggregator::m_beta),
                           MakeDoubleChecker<double>())
-            .AddAttribute("AddRttSuppress", "Minimum number of RTTs (1 + this factor) between window decreases",
+            .AddAttribute("Gamma",
+                          "Remote congestion decrease factor",
+                          DoubleValue(0.7),
+                          MakeDoubleAccessor(&Aggregator::m_gamma),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("EWMAFactor",
+                          "EWMA factor used when measuring RTT, recommended between 0.1 and 0.3",
+                          DoubleValue(0.3),
+                          MakeDoubleAccessor(&Aggregator::m_EWMAFactor),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("ThresholdFactor",
+                          "Factor to compute actual RTT threshold",
+                          DoubleValue(1.2),
+                          MakeDoubleAccessor(&Aggregator::m_thresholdFactor),
+                          MakeDoubleChecker<double>())
+            .AddAttribute("AddRttSuppress",
+                          "Minimum number of RTTs (1 + this factor) between window decreases",
                           DoubleValue(0.5),
                           MakeDoubleAccessor(&Aggregator::m_addRttSuppress),
                           MakeDoubleChecker<double>())
@@ -109,7 +149,7 @@ Aggregator::GetTypeId(void)
                           MakeBooleanChecker())
             .AddAttribute("UseCwa",
                           "If true, use Conservative Window Adaptation",
-                          BooleanValue(true),
+                          BooleanValue(false),
                           MakeBooleanAccessor(&Aggregator::m_useCwa),
                           MakeBooleanChecker())
             .AddTraceSource("LastRetransmittedInterestDataDelay",
@@ -124,11 +164,11 @@ Aggregator::GetTypeId(void)
                             "Window that controls how many outstanding interests are allowed",
                             MakeTraceSourceAccessor(&Aggregator::m_window),
                             "ns3::ndn::Aggregator::WindowTraceCallback")
-            .AddTraceSource("InFlight", "Current number of outstanding interests",
+            .AddTraceSource("InFlight",
+                            "Current number of outstanding interests",
                             MakeTraceSourceAccessor(&Aggregator::m_inFlight),
                             "ns3::ndn::Aggregator::WindowTraceCallback");
     return tid;
-
 }
 
 
@@ -140,12 +180,13 @@ Aggregator::Aggregator()
     : m_rand(CreateObject<UniformRandomVariable>())
     , treeSync(false)
     , RTT_threshold(0)
+    , RTT_measurement(0)
+    , RTT_count(0)
+    , RTT_a(0.3)
     , m_inFlight(0)
     , m_ssthresh(std::numeric_limits<double>::max())
     , m_highData(0)
     , m_recPoint(0.0)
-    , m_alpha(0.6)
-    , m_gamma(0.7)
     , m_seq(0)
     , SRTT(0)
     , RTTVAR(0)
@@ -304,9 +345,29 @@ Aggregator::CheckRetxTimeout()
 
 /**
  * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
+ * Apply Exponentially Weighted Moving Average (EWMA) for RTT Threshold Computation
  * @param responseTime
  */
 void
+Aggregator::RTTThresholdMeasure(int64_t responseTime)
+{
+    if (RTT_count == 0) {
+        RTT_measurement = responseTime;
+    } else {
+        RTT_measurement = m_EWMAFactor * responseTime + (1 - m_EWMAFactor) * RTT_measurement;
+        RTT_threshold = m_thresholdFactor * RTT_measurement;
+    }
+
+    if (RTT_count >= numChild * 3) // Whether it's larger than 3 iterations
+    {
+        NS_LOG_INFO("Apply RTT_threshold, current value is: " << RTT_threshold);
+    }
+    RTT_count++;
+}
+
+
+
+/*void
 Aggregator::RTTThresholdMeasure(int64_t responseTime)
 {
     RTT_threshold_vec.push_back(responseTime);
@@ -324,7 +385,7 @@ Aggregator::RTTThresholdMeasure(int64_t responseTime)
             ns3::Simulator::Stop();
         }
     }
-}
+}*/
 
 
 
@@ -420,36 +481,6 @@ Aggregator::StartApplication()
     //NS_LOG_FUNCTION_NOARGS();
     App::StartApplication();
     FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
-
-
-    // ToDo: enable later
-    /*    // For testing purpose
-    RTO_recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_RTO.txt";
-    window_Recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_window.txt";
-    responseTime_recorder = "src/ndnSIM/results/log/" + m_prefix.toUri() + "_RTT.txt";
-
-    // Open and immediately close the file in write mode to clear it
-    std::ofstream file1(RTO_recorder, std::ios::out);
-    std::ofstream file2(window_Recorder, std::ios::out);
-    std::ofstream file3(responseTime_recorder, std::ios::out);
-    if (!file1.is_open()) {
-        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
-        Simulator::Stop();
-    }
-    if (!file2.is_open()) {
-        std::cerr << "Failed to open the file: " << window_Recorder << std::endl;
-        Simulator::Stop();
-    }
-    if (!file3.is_open()) {
-        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
-        Simulator::Stop();
-    }
-    file1.close(); // Optional here since file will be closed automatically
-    file2.close();
-    file3.close();
-
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::RTO_Recorder, this);
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);*/
 }
 
 
@@ -618,10 +649,10 @@ Aggregator::WindowDecrease(std::string type)
         m_recPoint = m_seq + (m_addRttSuppress * diff);
 
         if (type == "timeout") {
-            m_ssthresh = m_window * m_beta;
+            m_ssthresh = m_window * m_alpha;
             m_window = m_ssthresh;
         } else if (type == "LocalCongestion") {
-            m_ssthresh = m_window * m_alpha;
+            m_ssthresh = m_window * m_beta;
             m_window = m_ssthresh;
         } else if (type == "RemoteCongestion") {
             m_ssthresh = m_window * m_gamma;
@@ -782,7 +813,6 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
 
         // Start recording into logs
         Simulator::Schedule(MilliSeconds(5), &Aggregator::RTORecorder, this);
-        Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 
         // Generate a new data packet to respond to tree broadcasting
         Name dataName(interest->getName());
@@ -951,19 +981,18 @@ Aggregator::OnData(shared_ptr<const Data> data)
             startTime.erase(dataName);
         }
 
-        // Record RTT
-        ResponseTimeRecorder(responseTime[dataName]);
-
         // Reset RetxTimer and timeout interval
         RTO_Timer = RTOMeasurement(responseTime[dataName].GetMilliSeconds());
         m_timeoutThreshold = RTO_Timer;
         NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
         NS_LOG_DEBUG("RTO measurement: " << RTO_Timer.GetMilliSeconds() << " ms");
 
-        // Set RTT_threshold to control cwnd
-        if (RTT_threshold_vec.size() < numChild) {
-            RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
-        } else if (RTT_threshold != 0 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
+        // Setup RTT_threshold based on RTT of the first 5 iterations, then update RTT_threshold after each new iteration based on EWMA
+        // ToDo: What about setting up a initial cwnd to run several iterations, other than start cwnd from 1
+        RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds());
+
+        // RTT_threshold measurement initialization is done after 3 iterations, before that, don't perform cwnd control
+        if (RTT_count >= numChild * 3 && responseTime[dataName].GetMilliSeconds() > RTT_threshold) {
             ECNLocal = true;
         }
 
@@ -981,6 +1010,8 @@ Aggregator::OnData(shared_ptr<const Data> data)
             return;
         }
 
+        // Record RTT
+        ResponseTimeRecorder(responseTime[dataName], seq, ECNLocal, RTT_threshold);
 
         /// AIMD begins
         if (m_highData < seq) {
@@ -1018,6 +1049,9 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }
 
         NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
+
+        // Record window after each new packet arrives
+        WindowRecorder();
 
         ScheduleNextPacket();
         /// AIMD ends
@@ -1082,7 +1116,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
 
 
 /**
- * Record window every 5 ms, and store them in a file
+ * Record window when receiving a new packet
  */
 void
 Aggregator::WindowRecorder()
@@ -1096,7 +1130,6 @@ Aggregator::WindowRecorder()
     } else {
         std::cerr << "Unable to open file: " << window_Recorder << std::endl;
     }
-    Simulator::Schedule(MilliSeconds(5), &Aggregator::WindowRecorder, this);
 }
 
 
@@ -1130,7 +1163,7 @@ Aggregator::RTORecorder()
  * @param responseTime
  */
 void
-Aggregator::ResponseTimeRecorder(Time responseTime) {
+Aggregator::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_actual) {
     // Open the file using fstream in append mode
     std::ofstream file(responseTime_recorder, std::ios::app);
 
@@ -1140,7 +1173,7 @@ Aggregator::ResponseTimeRecorder(Time responseTime) {
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << responseTime.GetMilliSeconds() << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << seq << " " << ECN << " " << threshold_actual << " " << responseTime.GetMilliSeconds() << std::endl;
 
     // Close the file
     file.close();
