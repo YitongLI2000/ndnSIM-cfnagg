@@ -273,7 +273,7 @@ Consumer::ConstructAggregationTree()
                 std::cout << value << " ";
             }
             std::cout << std::endl;
-            
+
             // 1. Aggregator
             // Initialize "broadcastList" for tree broadcasting synchronization
             if (pair.first != m_nodeprefix) {
@@ -894,6 +894,10 @@ Consumer::OnData(shared_ptr<const Data> data)
                 NS_LOG_INFO("Total interest throughput is: " << totalInterestThroughput << " bytes.");
                 NS_LOG_INFO("Total data throughput is: " << totalDataThroughput << " bytes.");
                 NS_LOG_INFO("The average aggregation time of Consumer in " << iterationCount << " iteration is: " << GetAggregateTimeAverage() << " ms");
+
+                // Record throughput into file
+                ThroughputRecorder(totalInterestThroughput, totalDataThroughput);
+
                 return;
             }
         } else {
@@ -1071,8 +1075,7 @@ Consumer::ThroughputRecorder(int interestThroughput, int dataThroughput)
     }
 
     // Write aggregation time to file, followed by a new line
-    // Todo: write the correct msg into file
-    //file <<  << " " << aggregateTime.GetMilliSeconds() << std::endl;
+    file << interestThroughput << " " << dataThroughput << " " << numChild << std::endl;
 
     file.close();
 }

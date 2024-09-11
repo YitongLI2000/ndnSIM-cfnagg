@@ -123,6 +123,8 @@ public:
 
     bool CanDecreaseWindow(int64_t threshold);
 
+    void ThroughputRecorder(int interestThroughput, int dataThroughput);
+
 protected:
     virtual void StartApplication() override;
 

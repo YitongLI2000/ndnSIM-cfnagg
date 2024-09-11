@@ -777,6 +777,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
 
         // Define for new congestion control
         numChild = static_cast<int> (aggregationMap.size());
+        NS_LOG_DEBUG("The number of child nodes: " << numChild);
 
         // testing, delete later!!!!
 /*        if (aggregationMap.empty())
@@ -1055,8 +1056,6 @@ Aggregator::OnData(shared_ptr<const Data> data)
         ScheduleNextPacket();
         /// AIMD ends
 
-
-
         // Check whether the aggregation of current iteration is done
         if (vec.empty()){
             NS_LOG_DEBUG("Aggregation finished.");
@@ -1103,6 +1102,12 @@ Aggregator::OnData(shared_ptr<const Data> data)
             data->wireEncode();
             m_transmittedDatas(data, this, m_face);
             m_appLink->onReceiveData(*data);
+
+            // All iterations have finished, record the entire throughput
+            if (seq == m_iteNum) {
+                ThroughputRecorder(totalInterestThroughput, totalDataThroughput);
+            }
+
         } else{
             NS_LOG_DEBUG("Wait for others to aggregate.");
         }
@@ -1232,6 +1237,30 @@ Aggregator::CanDecreaseWindow(int64_t threshold)
     } else {
         return false;
     }
+}
+
+
+
+/**
+ * Record the final throughput into file at the end of simulation
+ * @param interestThroughput
+ * @param dataThroughput
+ */
+void
+Aggregator::ThroughputRecorder(int interestThroughput, int dataThroughput)
+{
+    // Open the file using fstream in append mode
+    std::ofstream file(throughput_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << throughput_recorder << std::endl;
+        return;
+    }
+
+    // Write aggregation time to file, followed by a new line
+    file << interestThroughput << " " << dataThroughput << " " << numChild << std::endl;
+
+    file.close();
 }
 
 } // namespace ndn
