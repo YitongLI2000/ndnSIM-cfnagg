@@ -121,7 +121,7 @@ public:
 
     void InitializeLogFile();
 
-
+    bool CanDecreaseWindow(int64_t threshold);
 
 protected:
     virtual void StartApplication() override;
@@ -151,11 +151,20 @@ public:
 protected:
     // log file
     // All logs start to write after synchronization, make sure only the chosen aggregators will generate log files; those aren't chosen will disable this function
-    std::string folderPath = "src/ndnSIM/results/logs";
     std::string RTO_recorder;
     std::string window_Recorder;
     std::string responseTime_recorder;
     std::string aggregateTime_recorder;
+    int suspiciousPacketCount;
+
+    // Update when WindowDecrease() is called every time, used for CWA algorithm
+    Time LastWindowDecreaseTime;
+    bool isWindowDecreaseSuppressed;
+
+
+    // Local throughput measurement
+    int totalInterestThroughput;
+    int totalDataThroughput;
 
     // Tree broadcast synchronization
     bool treeSync;
@@ -175,7 +184,7 @@ protected:
 
     // cwnd management
     uint32_t m_initialWindow;
-    TracedValue<double> m_window;;
+    TracedValue<double> m_window;
     TracedValue<uint32_t> m_inFlight;
     bool m_setInitialWindowOnTimeout;
 
@@ -190,7 +199,9 @@ protected:
     double m_EWMAFactor; // Factor used in EWMA, recommended value is between 0.1 and 0.3
     double m_thresholdFactor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
     double m_addRttSuppress;
-    bool m_reactToCongestionMarks;
+    bool m_reactToCongestionMarks; // PCON's implementation, disable it for now
+    int m_maxQueue; // Max queue size
+    uint32_t m_iteNum;
 
 
     uint32_t m_seq;      ///< @brief currently requested sequence number

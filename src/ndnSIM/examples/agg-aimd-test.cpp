@@ -10,12 +10,49 @@
 
 namespace ns3 {
 
-    void PacketDropCallback(std::string context, Ptr<const Packet> packet){
-        uint32_t droppedPacket = 0;
-        droppedPacket++;
-        std::cout << "Packet dropped! Total dropped packets: " << droppedPacket << std::endl;
+    struct ConfigParams {
+        int Constraint;
+        std::string Window;
+        double Alpha;
+        double Beta;
+        double Gamma;
+        double EWMAFactor;
+        double ThresholdFactor;
+        bool UseCwa;
+        int InterestQueue;
+        int QueueSize;
+        int Iteration;
+    };
+
+    /**
+     * Get all required config parameters
+     * @return
+     */
+    ConfigParams GetConfigParams() {
+        boost::property_tree::ptree pt;
+        boost::property_tree::ini_parser::read_ini("src/ndnSIM/experiments/config.ini", pt);
+
+        ConfigParams params;
+        params.Constraint = pt.get<int>("General.Constraint");
+        params.Window = pt.get<std::string>("General.Window");
+        params.Alpha = pt.get<double>("General.Alpha");
+        params.Beta = pt.get<double>("General.Beta");
+        params.Gamma = pt.get<double>("General.Gamma");
+        params.EWMAFactor = pt.get<double>("General.EWMAFactor");
+        params.ThresholdFactor = pt.get<double>("General.ThresholdFactor");
+        params.UseCwa = pt.get<bool>("General.UseCwa");
+        params.InterestQueue = pt.get<int>("Consumer.InterestQueue");
+        params.QueueSize = pt.get<int>("Aggregator.QueueSize");
+        params.Iteration = pt.get<int>("Consumer.Iteration");
+
+        return params;
     }
 
+
+    /**
+     * Get constraints from config.ini
+     * @return
+     */
     int GetConstraint() {
         boost::property_tree::ptree pt;
         boost::property_tree::ini_parser::read_ini("src/ndnSIM/experiments/config.ini", pt);
@@ -24,8 +61,18 @@ namespace ns3 {
         return constraint;
     }
 
-    int
-    main(int argc, char* argv[])
+    /**
+     * Define packet loss tracing function
+     * @param context
+     * @param packet
+     */
+    void PacketDropCallback(std::string context, Ptr<const Packet> packet){
+        uint32_t droppedPacket = 0;
+        droppedPacket++;
+        std::cout << "Packet dropped! Total dropped packets: " << droppedPacket << std::endl;
+    }
+
+    int main(int argc, char* argv[])
     {
         CommandLine cmd;
         cmd.Parse(argc, argv);
@@ -52,30 +99,47 @@ namespace ns3 {
         Config::Connect("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/PhyRxDrop", MakeCallback(&PacketDropCallback));
 
         // Get constraint from config.ini
-        int constraint = GetConstraint();
+        //int constraint = GetConstraint();
+        ConfigParams params = GetConfigParams();
 
         for (NodeContainer::Iterator i = NodeList::Begin(); i != NodeList::End(); ++i) {
             Ptr<Node> node = *i;
             std::string nodeName = Names::FindName(node);
 
             if (nodeName.find("con") == 0) {
-                // Install ConsumerCbr on consumer nodes
+                // Config consumer's attribute on ConsumerINA class
                 ndn::AppHelper consumerHelper("ns3::ndn::ConsumerINA");
-                consumerHelper.SetAttribute("Iteration", IntegerValue(150));
-                consumerHelper.SetAttribute("Constraint", IntegerValue(constraint));
-                consumerHelper.SetAttribute("Window", StringValue("1"));
-                consumerHelper.SetAttribute("UseCwa", BooleanValue(false));
+                consumerHelper.SetAttribute("Iteration", IntegerValue(params.Iteration));
+                consumerHelper.SetAttribute("UseCwa", BooleanValue(params.UseCwa));
                 consumerHelper.SetAttribute("NodePrefix", StringValue("con0"));
+                consumerHelper.SetAttribute("Constraint", IntegerValue(params.Constraint));
+                consumerHelper.SetAttribute("Window", StringValue(params.Window));
+                consumerHelper.SetAttribute("Alpha", DoubleValue(params.Alpha));
+                consumerHelper.SetAttribute("Beta", DoubleValue(params.Beta));
+                consumerHelper.SetAttribute("Gamma", DoubleValue(params.Gamma));
+                consumerHelper.SetAttribute("EWMAFactor", DoubleValue(params.EWMAFactor));
+                consumerHelper.SetAttribute("ThresholdFactor", DoubleValue(params.ThresholdFactor));
+                consumerHelper.SetAttribute("InterestQueue", IntegerValue(params.InterestQueue));
+
+                // Add consumer prefix in all nodes' routing info
                 auto app1 = consumerHelper.Install(node);
                 GlobalRoutingHelper.Install(node); // Ensure routing is enabled
                 app1.Start(Seconds(1));
             } else if (nodeName.find("agg") == 0) {
-                // Install a hypothetical Aggregator application on aggregator nodes
+                // Config aggregator's attribute on aggregator class
                 ndn::AppHelper aggregatorHelper("ns3::ndn::Aggregator");
                 aggregatorHelper.SetPrefix("/" + nodeName);
-                //aggregatorHelper.SetAttribute("NodePrefix", StringValue(nodeName));
-                aggregatorHelper.SetAttribute("Window", StringValue("1"));
-                aggregatorHelper.SetAttribute("UseCwa", BooleanValue(false));
+                aggregatorHelper.SetAttribute("Iteration", IntegerValue(params.Iteration));
+                aggregatorHelper.SetAttribute("UseCwa", BooleanValue(params.UseCwa));
+                aggregatorHelper.SetAttribute("Window", StringValue(params.Window));
+                aggregatorHelper.SetAttribute("Alpha", DoubleValue(params.Alpha));
+                aggregatorHelper.SetAttribute("Beta", DoubleValue(params.Beta));
+                aggregatorHelper.SetAttribute("Gamma", DoubleValue(params.Gamma));
+                aggregatorHelper.SetAttribute("EWMAFactor", DoubleValue(params.EWMAFactor));
+                aggregatorHelper.SetAttribute("ThresholdFactor", DoubleValue(params.ThresholdFactor));
+                aggregatorHelper.SetAttribute("QueueSize", IntegerValue(params.QueueSize));
+
+                // Add aggregator prefix in all nodes' routing info
                 auto app2 = aggregatorHelper.Install(node);
                 GlobalRoutingHelper.Install(node); // Ensure routing is enabled
                 GlobalRoutingHelper.AddOrigins("/" + nodeName, node);
@@ -84,7 +148,8 @@ namespace ns3 {
                 // Install Producer on producer nodes
                 ndn::AppHelper producerHelper("ns3::ndn::Producer");
                 producerHelper.SetPrefix("/" + nodeName);
-                //producerHelper.SetAttribute("PayloadSize", StringValue("1024"));
+
+                // Add producer prefix in all nodes' routing info
                 producerHelper.Install(node);
                 GlobalRoutingHelper.Install(node); // Ensure routing is enabled
                 GlobalRoutingHelper.AddOrigins("/" + nodeName, node);

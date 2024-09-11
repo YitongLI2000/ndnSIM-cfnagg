@@ -133,7 +133,7 @@ ConsumerINA::ScheduleNextPacket()
     else if (m_window == static_cast<uint32_t>(0)) {
         Simulator::Remove(m_sendEvent);
 
-        NS_LOG_DEBUG("Error! Window becomes 0!!!!!!");
+        NS_LOG_INFO("Error! Window becomes 0!!!!!!");
         //NS_LOG_DEBUG("New event in " << (std::min<double>(0.5, m_rtt->RetransmitTimeout().ToDouble(Time::S))) << " sec");
         m_sendEvent = Simulator::Schedule(Seconds(std::min<double>(0.5, (m_retxTimer*6).GetSeconds())),
                                           &Consumer::SendPacket, this);
@@ -180,35 +180,63 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
 
     std::string dataName = data->getName().toUri();
     uint64_t sequenceNum = data->getName().get(-1).toSequenceNumber();
+    std::string type = data->getName().get(-2).toUri();
+    std::string name_sec0 = data->getName().get(0).toUri();
 
     // Set highest received Data to sequence number
     if (m_highData < sequenceNum) {
         m_highData = sequenceNum;
     }
 
-    if (!broadcastSync) {
-        NS_LOG_INFO("Currently broadcasting aggregation tree, ignore relevant cwnd/congestion management");
-    }
-    else if (data->getCongestionMark() > 0) {
-        if (m_reactToCongestionMarks) {
-            NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
-            WindowDecrease("ConsumerCongestion");
+    // Only perform congestion control for those type is "data", disable this function for "initialization" type
+    if (type == "data") {
+        // Get current packet's round index
+        int roundIndex = Consumer::findRoundIndex(name_sec0);
+        if (roundIndex == -1) {
+            NS_LOG_DEBUG("Error on roundIndex!");
+            ns3::Simulator::Stop();
         }
+        NS_LOG_DEBUG("This packet comes from round " << roundIndex);
+
+        // Perform congestion control
+        // Priority
+        // 1. Whether broadcasting("initialization") has finished
+        // 2. PCON's ECN mark - not enable now
+        // 3. Based on congestion signal, perform congestion/rate control
+        // 4. CWA algorithm control whether window decrease should be performed
+        if (!broadcastSync) {
+            NS_LOG_INFO("Currently broadcasting aggregation tree, ignore relevant cwnd/congestion management");
+        }
+/*        else if (data->getCongestionMark() > 0) {
+            if (m_reactToCongestionMarks) {
+                NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
+                WindowDecrease("ConsumerCongestion");
+            }
+            else {
+                NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
+            }
+        }*/
+        else if (ECNLocal) {
+            // Whether CWA is enabled
+            if (m_useCwa && !CanDecreaseWindow(RTT_measurement[roundIndex])) {
+                isWindowDecreaseSuppressed = true;
+                NS_LOG_INFO("Window decrease is suppressed.");
+            } else {
+                NS_LOG_INFO("Congestion signal exists in consumer!");
+                WindowDecrease("ConsumerCongestion");
+            }
+        }
+/*        else if (ECNRemote) {
+            NS_LOG_INFO("Congestion signal exists in aggregator!");
+            WindowDecrease("AggregatorCongestion");
+        }*/
         else {
-            NS_LOG_DEBUG("Ignored received congestion mark: " << data->getCongestionMark());
+            NS_LOG_INFO("No congestion, increase the cwnd.");
+            WindowIncrease();
         }
-    }
-    else if (ECNLocal) {
-        NS_LOG_INFO("Congestion signal exists in consumer!");
-        WindowDecrease("ConsumerCongestion");
-    }
-/*    else if (ECNRemote) {
-        NS_LOG_INFO("Congestion signal exists in aggregator!");
-        WindowDecrease("AggregatorCongestion");
-    }*/
-    else {
-        NS_LOG_INFO("No congestion, increase the cwnd.");
-        WindowIncrease();
+
+        // Record the last flag in in RTT's log
+        ResponseTimeRecorder(isWindowDecreaseSuppressed);
     }
 
     if (m_inFlight > static_cast<uint32_t>(0)) {
@@ -293,37 +321,29 @@ ConsumerINA::WindowIncrease()
 void
 ConsumerINA::WindowDecrease(std::string type)
 {
-    if (!m_useCwa || m_highData > m_recPoint) {
-        // ToDo: "m_seq" is pending modification, it needs to be modified into the one recording current max seq that has been sent out
-        const double diff = m_seq - m_highData;
-        BOOST_ASSERT(diff >= 0);
-
-        m_recPoint = m_seq + (m_addRttSuppress * diff);
-
-        // AIMD for timeout
-        if (type == "timeout") {
-            m_ssthresh = m_window * m_alpha;
-            m_window = m_ssthresh;
-        }
-        else if (type == "ConsumerCongestion") {
-            m_ssthresh = m_window * m_beta;
-            m_window = m_ssthresh;
-        }
-        else if (type == "AggregatorCongestion") {
-            m_ssthresh = m_window * m_gamma;
-            m_window = m_ssthresh;
-        }
-
-        // Window size can't be reduced below initial size
-        if (m_window < m_initialWindow) {
-            m_window = m_initialWindow;
-        }
-
-        NS_LOG_DEBUG("Encounter " << type << ". Window size decreased to " << m_window);
+    // AIMD for timeout
+    if (type == "timeout") {
+        m_ssthresh = m_window * m_alpha;
+        m_window = m_ssthresh;
     }
-    else {
-        NS_LOG_DEBUG("Window decrease suppressed, HighData: " << m_highData << ", RecPoint: " << m_recPoint);
+    else if (type == "ConsumerCongestion") {
+        m_ssthresh = m_window * m_beta;
+        m_window = m_ssthresh;
+
+        // Perform CWA when handling consumer congestion
+        lastWindowDecreaseTime = Simulator::Now();
     }
+    else if (type == "AggregatorCongestion") {
+        m_ssthresh = m_window * m_gamma;
+        m_window = m_ssthresh;
+    }
+
+    // Window size can't be reduced below initial size
+    if (m_window < m_initialWindow) {
+        m_window = m_initialWindow;
+    }
+
+    NS_LOG_DEBUG("Encounter " << type << ". Window size decreased to " << m_window);
 }
 
 
@@ -342,11 +362,34 @@ ConsumerINA::WindowRecorder()
         return;
     }
 
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << std::endl;
+    file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << " " << m_ssthresh << std::endl;
 
     file.close();
 }
 
+
+
+/**
+ * Record "isWindowDecreaseSuppressed" bool flag
+ * @param flag
+ */
+void
+ConsumerINA::ResponseTimeRecorder(bool flag)
+{
+    // Open the file using fstream in append mode
+    std::ofstream file(responseTime_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        return;
+    }
+
+    // Write the response_time to the file, followed by a newline
+    file << " " << flag << std::endl;
+
+    // Close the file
+    file.close();
+}
 
 
 /**

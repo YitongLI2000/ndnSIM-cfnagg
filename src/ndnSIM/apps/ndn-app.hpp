@@ -133,6 +133,10 @@ protected:
 public:
     std::map<std::string, std::vector<std::string>> m_linkInfo;
 
+    // Define log directory
+    std::string folderPath = "src/ndnSIM/results/logs";
+    std::string throughput_recorder = folderPath + "/throughput.txt";
+
 protected:
 
   bool m_active; ///< @brief Flag to indicate that application is active (set by StartApplication and StopApplication)

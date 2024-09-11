@@ -121,6 +121,9 @@ public:
 
     void InitializeLogFile();
 
+    bool CanDecreaseWindow(int64_t threshold);
+
+    void ThroughputRecorder(int interestThroughput, int dataThroughput);
 
 public:
     typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
@@ -155,8 +158,7 @@ public:
     getLeafNodes(const std::string& key,const std::map<std::string, std::vector<std::string>>& treeMap);
 
     // Return round index
-    int
-    findRoundIndex(const std::string& target);
+    int findRoundIndex(const std::string& target);
 
 
 
@@ -166,11 +168,20 @@ protected:
 
     // Testing log file
     // ToDo: Update logging for multiple rounds
-    std::string folderPath = "src/ndnSIM/results/logs";
-    std::string RTO_recorder = folderPath + "/consumer_RTO.txt";
-    std::string responseTime_recorder = folderPath + "/consumer_RTT.txt";
-    std::string aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt";
+    std::string RTO_recorder = folderPath + "/consumer_RTO.txt"; //'Time', 'RTO'
+    std::string responseTime_recorder = folderPath + "/consumer_RTT.txt"; //'Time', 'seq', ‘ECN’， ‘RTT threshold’，'RTT', 'isWindowDecreaseSuppressed'
+    std::string aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt"; //'Time', 'aggTime'
+    //std::string throughput_recorder = folderPath + "/throughput.txt";
     int suspiciousPacketCount; // When timeout is triggered, add one
+
+    // Update when WindowDecrease() is called every time, used for CWA algorithm
+    Time lastWindowDecreaseTime;
+    bool isWindowDecreaseSuppressed;
+
+    // Local throughput measurement
+    int totalInterestThroughput;
+    int totalDataThroughput;
+    int numChild; // The number of child nodes of consumer, used to specify the actual number of links for bandwidth utilization
 
     // Congestion/rate control
     std::vector<std::vector<std::string>> globalTreeRound;
@@ -191,16 +202,14 @@ protected:
 
     // Constructed aggregation Tree
     std::vector<std::map<std::string, std::vector<std::string>>> aggregationTree; // Entire tree (including main tree and sub-trees)
-    std::vector<std::vector<std::string>> subTree; // Sub-trees (if any)
 
     // Broadcast aggregation tree
     bool broadcastSync;
-    std::vector<std::string> broadcastList;
+    std::vector<std::string> broadcastList; // Elements within this vector need to be broadcasted
 
     // Aggregation synchronization
     std::map<uint32_t, std::vector<std::vector<std::string>>> map_agg_oldSeq_newName; // Manage names for round
     std::map<uint32_t, std::vector<std::string>> m_agg_newDataName; // Manage names for entire iteration
-    std::map<std::string, std::string> map_child_nameSec1;
 
     // Used inside InterestGenerator function
     std::map<int, std::vector<std::string>> map_round_nameSec1_3;
@@ -243,7 +252,7 @@ protected:
     std::string m_interestName; // Consumer's interest prefix
     std::string m_nodeprefix; // Consumer's node prefix
     uint32_t m_iteNum; // The number of iterations
-    int64_t m_queueSize; // Queue size
+    int m_interestQueue; // Queue size
     int m_constraint; // Constraint of each sub-tree
     double m_EWMAFactor; // Factor used in EWMA, recommended value is between 0.1 and 0.3
     double m_thresholdFactor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"

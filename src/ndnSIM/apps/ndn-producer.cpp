@@ -85,14 +85,14 @@ Producer::GetTypeId(void)
 
 Producer::Producer()
 {
-  NS_LOG_FUNCTION_NOARGS();
+  //NS_LOG_FUNCTION_NOARGS();
 }
 
 // inherited from Application base class.
 void
 Producer::StartApplication()
 {
-  NS_LOG_FUNCTION_NOARGS();
+  //NS_LOG_FUNCTION_NOARGS();
   App::StartApplication();
 
   FibHelper::AddRoute(GetNode(), m_prefix, m_face, 0);
@@ -101,7 +101,7 @@ Producer::StartApplication()
 void
 Producer::StopApplication()
 {
-  NS_LOG_FUNCTION_NOARGS();
+  //NS_LOG_FUNCTION_NOARGS();
 
   App::StopApplication();
 }
@@ -155,6 +155,7 @@ Producer::OnInterest(shared_ptr<const Interest> interest)
     data->setSignatureValue(encoder.getBuffer());
 
     NS_LOG_INFO(m_prefix << " -> node(" << GetNode()->GetId() << ") responding with Data: " << data->getName());
+    NS_LOG_INFO("The returned data packet size is: " << data->wireEncode().size());
 
     // to create real wire encoding
     data->wireEncode();

@@ -31,7 +31,7 @@ def Consumer_rtt_aggregationTime(file1, file2):
     try:
         # Load data from txt file
         # print("Loading data from: ", file1)
-        data1 = pd.read_csv(file1, sep="\s+", header=None, usecols=[0, 5])
+        data1 = pd.read_csv(file1, sep="\s+", header=None, usecols=[0, 4])
         data1.columns = ['Time', 'RTT']
 
         data2 = pd.read_csv(file2, sep="\s+", header=None)
@@ -79,10 +79,10 @@ def Consumer_window_rtt(file1, file2):
     """
     try:
         # Load data from txt file
-        data1 = pd.read_csv(file1, sep="\s+", header=None)
+        data1 = pd.read_csv(file1, sep="\s+", header=None, usecols=[0, 1])
         data1.columns = ['Time', 'Window']
 
-        data2 = pd.read_csv(file2, sep="\s+", header=None, usecols=[0, 5])
+        data2 = pd.read_csv(file2, sep="\s+", header=None, usecols=[0, 4])
         data2.columns = ['Time', 'RTT']
 
         # Create a figure with a single axis
@@ -130,7 +130,7 @@ def Consumer_window_rto(file1, file2):
     try:
         # Load data from txt files
         # print("Loading data from:", file1)
-        data1 = pd.read_csv(file1, sep="\s+", header=None)
+        data1 = pd.read_csv(file1, sep="\s+", header=None, usecols=[0, 1])
         data1.columns = ['Time', 'Window']
 
         # print("Loading data from:", file2)

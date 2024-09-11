@@ -86,6 +86,8 @@ private:
     // For testing purpose, measure the consumer's window
     void WindowRecorder();
 
+    void ResponseTimeRecorder(bool flag);
+
     void InitializeLogFile();
 
 public:
@@ -94,7 +96,7 @@ public:
 private:
     // Window design
     uint32_t m_initialWindow;
-    TracedValue<double> m_window;;
+    TracedValue<double> m_window;
     TracedValue<uint32_t> m_inFlight;
     bool m_setInitialWindowOnTimeout;
 

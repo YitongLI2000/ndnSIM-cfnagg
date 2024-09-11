@@ -134,9 +134,14 @@ Aggregator::GetTypeId(void)
                           MakeDoubleChecker<double>())
             .AddAttribute("ThresholdFactor",
                           "Factor to compute actual RTT threshold",
-                          DoubleValue(1.2),
+                          DoubleValue(1.0),
                           MakeDoubleAccessor(&Aggregator::m_thresholdFactor),
                           MakeDoubleChecker<double>())
+            .AddAttribute("Iteration",
+                          "The number of iterations to run in the simulation",
+                          IntegerValue(200),
+                          MakeIntegerAccessor(&Aggregator::m_iteNum),
+                          MakeIntegerChecker<int32_t>())
             .AddAttribute("AddRttSuppress",
                           "Minimum number of RTTs (1 + this factor) between window decreases",
                           DoubleValue(0.5),
@@ -152,6 +157,11 @@ Aggregator::GetTypeId(void)
                           BooleanValue(false),
                           MakeBooleanAccessor(&Aggregator::m_useCwa),
                           MakeBooleanChecker())
+            .AddAttribute("QueueSize",
+                          "Define the queue size",
+                          IntegerValue(50),
+                          MakeIntegerAccessor(&Aggregator::m_maxQueue),
+                          MakeIntegerChecker<int>())
             .AddTraceSource("LastRetransmittedInterestDataDelay",
                             "Delay between last retransmitted Interest and received Data",
                             MakeTraceSourceAccessor(&Aggregator::m_lastRetransmittedInterestDataDelay),
@@ -177,7 +187,10 @@ Aggregator::GetTypeId(void)
  * Constructor
  */
 Aggregator::Aggregator()
-    : m_rand(CreateObject<UniformRandomVariable>())
+    : suspiciousPacketCount(0)
+    , totalInterestThroughput(0)
+    , totalDataThroughput(0)
+    , m_rand(CreateObject<UniformRandomVariable>())
     , treeSync(false)
     , RTT_threshold(0)
     , RTT_measurement(0)
@@ -323,13 +336,13 @@ Aggregator::CheckRetxTimeout()
 {
     Time now = Simulator::Now();
 
-    //NS_LOG_INFO("Checking timeout. Current inFlight: " << m_inFlight);
+    //NS_LOG_DEBUG("Checking timeout. Current inFlight: " << m_inFlight);
 
     //NS_LOG_DEBUG("Check timeout after: " << m_retxTimer.GetMilliSeconds() << " ms");
     //NS_LOG_DEBUG("Current timeout threshold is: " << m_timeoutThreshold.GetMilliSeconds() << " ms");
 
     for (auto it = m_timeoutCheck.begin(); it != m_timeoutCheck.end();){
-        NS_LOG_INFO("Interest name: " << it->first);
+        NS_LOG_DEBUG("Interest name: " << it->first);
         if (now - it->second > m_timeoutThreshold) {
             std::string name = it->first;
             it = m_timeoutCheck.erase(it);
@@ -360,32 +373,10 @@ Aggregator::RTTThresholdMeasure(int64_t responseTime)
 
     if (RTT_count >= numChild * 3) // Whether it's larger than 3 iterations
     {
-        NS_LOG_INFO("Apply RTT_threshold, current value is: " << RTT_threshold);
+        NS_LOG_DEBUG("Apply RTT_threshold, current value is: " << RTT_threshold);
     }
     RTT_count++;
 }
-
-
-
-/*void
-Aggregator::RTTThresholdMeasure(int64_t responseTime)
-{
-    RTT_threshold_vec.push_back(responseTime);
-    if (RTT_threshold_vec.size() == numChild) {
-        int64_t sum = 0;
-        for (int64_t item: RTT_threshold_vec) {
-            sum += item;
-        }
-        RTT_threshold = 1.2 * (sum / numChild);
-
-        if (RTT_threshold != 0) {
-            NS_LOG_INFO("RTT_threshold is set as: " << RTT_threshold << " ms");
-        } else {
-            NS_LOG_INFO("Error! RTT_threshold is set as 0, please check!");
-            ns3::Simulator::Stop();
-        }
-    }
-}*/
 
 
 
@@ -436,6 +427,8 @@ Aggregator::OnTimeout(std::string nameString)
     shared_ptr<Name> name = make_shared<Name>(nameString);
     SendInterest(name);
 
+    // Add one to "suspiciousPacketCount"
+    suspiciousPacketCount++;
 }
 
 
@@ -628,7 +621,7 @@ Aggregator::WindowIncrease()
 {
     if (m_window < m_ssthresh) {
         m_window += 1.0;
-    }else {
+    } else {
         m_window += (1.0 / m_window);
     }
     NS_LOG_DEBUG("Window size increased to " << m_window);
@@ -642,33 +635,28 @@ Aggregator::WindowIncrease()
 void
 Aggregator::WindowDecrease(std::string type)
 {
-    if (!m_useCwa || m_highData > m_recPoint) {
-        const double diff = m_seq - m_highData;
-        BOOST_ASSERT(diff >= 0);
-
-        m_recPoint = m_seq + (m_addRttSuppress * diff);
-
-        if (type == "timeout") {
-            m_ssthresh = m_window * m_alpha;
-            m_window = m_ssthresh;
-        } else if (type == "LocalCongestion") {
-            m_ssthresh = m_window * m_beta;
-            m_window = m_ssthresh;
-        } else if (type == "RemoteCongestion") {
-            m_ssthresh = m_window * m_gamma;
-            m_window = m_ssthresh;
-        }
-
-        // Window size can't be reduced below initial size
-        if (m_window < m_initialWindow) {
-            m_window = m_initialWindow;
-        }
-
-        NS_LOG_DEBUG("Window size decreased to " << m_window);
+    // AIMD for timeout
+    if (type == "timeout") {
+        m_ssthresh = m_window * m_alpha;
+        m_window = m_ssthresh;
     }
-    else {
-        NS_LOG_DEBUG("Window decrease suppressed, HighData: " << m_highData << ", RecPoint: " << m_recPoint);
+    else if (type == "LocalCongestion") {
+        m_ssthresh = m_window * m_beta;
+        m_window = m_ssthresh;
+
+        // Perform CWA when handling consumer congestion
+        LastWindowDecreaseTime = Simulator::Now();
     }
+    else if (type == "RemoteCongestion") {
+        m_ssthresh = m_window * m_gamma;
+        m_window = m_ssthresh;
+    }
+
+    // Window size can't be reduced below initial size
+    if (m_window < m_initialWindow) {
+        m_window = m_initialWindow;
+    }
+    NS_LOG_DEBUG("Window size decreased to " << m_window);
 }
 
 
@@ -681,7 +669,7 @@ void
 Aggregator::OnInterest(shared_ptr<const Interest> interest)
 {
     NS_LOG_INFO("Receiving interest:  " << *interest);
-    //NS_LOG_INFO("The incoming interest packet size is: " << interest->wireEncode().size());
+    //NS_LOG_DEBUG("The incoming interest packet size is: " << interest->wireEncode().size());
     App::OnInterest(interest);
 
     std::string interestType = interest->getName().get(-2).toUri();
@@ -730,7 +718,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
                 if (std::find(segments.begin(), segments.end(), leaf) != segments.end()) {
                     name_sec1 += leaf + ".";
                 } else {
-                    NS_LOG_INFO("Data from " << leaf << " is not required for this iteration.");
+                    NS_LOG_DEBUG("Data from " << leaf << " is not required for this iteration.");
                 }
             }
             name_sec1.resize(name_sec1.size() - 1);
@@ -757,13 +745,14 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
             }
         }
 
-        // If current packet isn't duplicate, then push divided interests into interest queue; otherwise, drop current packet
+        // If current packet isn't duplicate, then push divided interests into interest queue; otherwise, drop this interest
+        // ToDo: is it possible to add logic to check whether the interest queue is full, if not, then drop the interest?
         if (!isDuplicate) {
             for (const auto& element : interestList) {
                 interestQueue.push(element);
             }
         } else {
-            NS_LOG_INFO("This is a replicate retransmission from upper tier, drop the entire packet!");
+            NS_LOG_INFO("This is a duplicate retransmission from downstream, drop the entire packet!");
             return;
         }
 
@@ -925,8 +914,14 @@ Aggregator::SendInterest(shared_ptr<Name> newName)
     m_transmittedInterests(newInterest, this, m_face);
     m_appLink->onReceiveInterest(*newInterest);
 
-    /// Designed for Window
+    // Designed for Window
     m_inFlight++;
+
+    // Record interest throughput
+    // Actual interests sending and retransmission are recorded as well
+    int interestSize = newInterest->wireEncode().size();
+    totalInterestThroughput += interestSize;
+    NS_LOG_DEBUG("Interest size: " << interestSize);
 }
 
 
@@ -943,12 +938,17 @@ Aggregator::OnData(shared_ptr<const Data> data)
 
     App::OnData(data);
     NS_LOG_INFO ("Received content object: " << boost::cref(*data));
-    //NS_LOG_INFO("The incoming data packet size is: " << data->wireEncode().size());
+    int dataSize = data->wireEncode().size();
 
     std::string dataName = data->getName().toUri();
     uint32_t seq = data->getName().at(-1).toSequenceNumber();
     ECNLocal = false;
     ECNRemote = false;
+    isWindowDecreaseSuppressed = false;
+
+    // Record data throughput
+    totalDataThroughput += dataSize;
+    NS_LOG_DEBUG("The incoming data packet size is: " << dataSize);
 
     // Stop checking timeout associated with this seq
     if (m_timeoutCheck.find(dataName) != m_timeoutCheck.end())
@@ -972,8 +972,6 @@ Aggregator::OnData(shared_ptr<const Data> data)
     auto data_map = map_agg_oldSeq_newName.find(seq);
     if (data_map != map_agg_oldSeq_newName.end())
     {
-        NS_LOG_INFO("Received data name: " << data->getName().toUri());
-
         // Response time computation (RTT)
         if (startTime.find(dataName) != startTime.end()){
             responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
@@ -1028,9 +1026,13 @@ Aggregator::OnData(shared_ptr<const Data> data)
             }
         }
         else if (ECNLocal) {
-            NS_LOG_DEBUG("Local congestion is detected");
+            if (!CanDecreaseWindow(RTT_measurement)) {
+                NS_LOG_INFO("Window decrease is suppressed.");
+            } else {
+                NS_LOG_INFO("Congestion signal exists in consumer!");
+                WindowDecrease("LocalCongestion");
+            }
             congestionSignal[seq] = true;
-            WindowDecrease("LocalCongestion");
         }
 /*        else if (ECNRemote) {
             NS_LOG_INFO("Remote congestion is detected.");
@@ -1043,9 +1045,6 @@ Aggregator::OnData(shared_ptr<const Data> data)
 
         if (m_inFlight > static_cast<uint32_t>(0)) {
             m_inFlight--;
-        } else {
-            NS_LOG_DEBUG("m_inFlight is 0, error.");
-            Simulator::Stop();
         }
 
         NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
@@ -1219,6 +1218,21 @@ Aggregator::InitializeLogFile()
     OpenFile(window_Recorder);
 }
 
+
+
+/**
+ * Check whether the cwnd has been decreased within the last RTT duration
+ * @param threshold
+ */
+bool
+Aggregator::CanDecreaseWindow(int64_t threshold)
+{
+    if (Simulator::Now().GetMilliSeconds() - LastWindowDecreaseTime.GetMilliSeconds() >= threshold) {
+        return true;
+    } else {
+        return false;
+    }
+}
 
 } // namespace ndn
 } // namespace ns3

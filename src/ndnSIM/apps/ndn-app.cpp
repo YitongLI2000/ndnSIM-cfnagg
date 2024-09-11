@@ -208,7 +208,6 @@ App::OpenFile(const std::string& filename)
 
 
 
-
 void
 App::DoInitialize()
 {
