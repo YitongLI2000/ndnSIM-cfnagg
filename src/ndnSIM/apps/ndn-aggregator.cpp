@@ -1258,7 +1258,7 @@ Aggregator::ThroughputRecorder(int interestThroughput, int dataThroughput)
     }
 
     // Write aggregation time to file, followed by a new line
-    file << interestThroughput << " " << dataThroughput << " " << numChild << std::endl;
+    file << interestThroughput << " " << dataThroughput << " 0" << std::endl;
 
     file.close();
 }

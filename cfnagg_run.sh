@@ -67,5 +67,6 @@ NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator ./waf --run agg-aimd-test
 
 # Generate simulation result
 cd ./src/ndnSIM/experiments
+$PYTHON throughput_measurement.py
 $PYTHON consumer_result_generator.py
 $PYTHON agg_result_generator.py

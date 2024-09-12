@@ -135,7 +135,7 @@ public:
 
     // Define log directory
     std::string folderPath = "src/ndnSIM/results/logs";
-    std::string throughput_recorder = folderPath + "/throughput.txt";
+    std::string throughput_recorder = folderPath + "/throughput.txt"; // "totalInterestThroughput", "totalDataThroughput", "total time"
 
 protected:
 

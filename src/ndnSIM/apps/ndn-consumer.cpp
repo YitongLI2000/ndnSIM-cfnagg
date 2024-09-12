@@ -889,7 +889,6 @@ Consumer::OnData(shared_ptr<const Data> data)
             /// Stop simulation
             if (iterationCount == m_iteNum) {
                 NS_LOG_DEBUG("Reach " << m_iteNum << " iterations, stop!");
-                ns3::Simulator::Stop();
                 NS_LOG_INFO("Timeout is triggered " << suspiciousPacketCount << " times.");
                 NS_LOG_INFO("Total interest throughput is: " << totalInterestThroughput << " bytes.");
                 NS_LOG_INFO("Total data throughput is: " << totalDataThroughput << " bytes.");
@@ -898,6 +897,8 @@ Consumer::OnData(shared_ptr<const Data> data)
                 // Record throughput into file
                 ThroughputRecorder(totalInterestThroughput, totalDataThroughput);
 
+                // Stop simulation
+                ns3::Simulator::Stop();
                 return;
             }
         } else {
@@ -1075,7 +1076,7 @@ Consumer::ThroughputRecorder(int interestThroughput, int dataThroughput)
     }
 
     // Write aggregation time to file, followed by a new line
-    file << interestThroughput << " " << dataThroughput << " " << numChild << std::endl;
+    file << interestThroughput << " " << dataThroughput << " " << Simulator::Now().GetSeconds() << std::endl;
 
     file.close();
 }
