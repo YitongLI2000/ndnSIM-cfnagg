@@ -133,9 +133,9 @@ protected:
 public:
     std::map<std::string, std::vector<std::string>> m_linkInfo;
 
-    // Define log directory
-    std::string folderPath = "src/ndnSIM/results/logs";
-    std::string throughput_recorder = folderPath + "/throughput.txt"; // "totalInterestThroughput", "totalDataThroughput", "total time"
+    // Throughput/aggregation tree log file
+    std::string throughput_recorder = "src/ndnSIM/results/logs/throughput.txt"; // "totalInterestThroughput", "totalDataThroughput", "total time"
+    std::string aggTree_recorder = "src/ndnSIM/results/logs/aggTree.txt";
 
 protected:
 

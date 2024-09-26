@@ -57,6 +57,8 @@ public:
 
     virtual void ScheduleNextPacket();
 
+    std::vector<std::pair<std::string, std::string>> InterestSplitting(std::string originalInterest);
+
     void SendPacket();
 
     void SendInterest(shared_ptr<Name> newName);
@@ -110,20 +112,22 @@ public:
     std::map<std::string, std::set<std::string>> aggTreeProcessStrings(const std::vector<std::string>& inputs);
 
 
-    // For testing purpose, measure the consumer's window
-    void WindowRecorder();
+    // Logging function
+    void WindowRecorder(std::string prefix);
 
-    void RTORecorder();
+    void ResponseTimeRecorder(Time responseTime, uint32_t seq, std::string prefix, bool ECN, int64_t threshold_actual);
 
-    void ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_actual);
+    void RTORecorder(std::string prefix);
 
     void AggregateTimeRecorder(Time aggregateTime);
 
     void InitializeLogFile();
 
+    void InitializeParameters();
+
     bool CanDecreaseWindow(int64_t threshold);
 
-    void ThroughputRecorder(int interestThroughput, int dataThroughput);
+    void ThroughputRecorder(int interestThroughput, int dataThroughput, Time start_simulation);
 
 protected:
     virtual void StartApplication() override;
@@ -152,10 +156,12 @@ public:
 
 protected:
     // log file
+    std::string folderPath = "src/ndnSIM/results/logs/agg";
+
     // All logs start to write after synchronization, make sure only the chosen aggregators will generate log files; those aren't chosen will disable this function
-    std::string RTO_recorder;
-    std::string window_Recorder;
-    std::string responseTime_recorder;
+    std::map<std::string, std::string> RTO_recorder;
+    std::map<std::string, std::string> window_recorder;
+    std::map<std::string, std::string> responseTime_recorder;
     std::string aggregateTime_recorder;
     int suspiciousPacketCount;
 
@@ -167,12 +173,14 @@ protected:
     // Local throughput measurement
     int totalInterestThroughput;
     int totalDataThroughput;
+    Time startSimulation;
+    Time stopSimulation;
 
     // Tree broadcast synchronization
     bool treeSync;
 
     // Congestion control, measure RTT threshold to detect congestion
-    int numChild;
+    int numChild; // Start congestion control after 3 iterations
     std::vector<int64_t> RTT_threshold_vec;
     int64_t RTT_threshold; // Actual threshold used to detect congestion
     int64_t RTT_measurement; // The estimated RTT value using EWMA
@@ -186,8 +194,14 @@ protected:
 
     // cwnd management
     uint32_t m_initialWindow;
-    TracedValue<double> m_window;
-    TracedValue<uint32_t> m_inFlight;
+    
+    // TODO: delete these two later, extend them into map first
+    //TracedValue<double> m_window;
+    //TracedValue<uint32_t> m_inFlight;
+    //std::map<std::string, double> m_window;
+    //std::map<std::string, uint32_t> m_inFlight;
+    double m_window;
+    uint32_t m_inFlight;
     bool m_setInitialWindowOnTimeout;
 
     // AIMD cwnd management
@@ -206,23 +220,12 @@ protected:
     uint32_t m_iteNum;
 
 
-    uint32_t m_seq;      ///< @brief currently requested sequence number
-    uint32_t m_seqMax;   ///< @brief maximum number of sequence number
-    EventId m_sendEvent; ///< @brief EventId of pending "send packet" event
-    Time m_retxTimer;    ///< @brief Currently estimated retransmission timer
-    EventId m_retxEvent; ///< @brief Event to check whether or not retransmission should be performed
-
-    Ptr<RttEstimator> m_rtt; ///< @brief RTT estimator
-
-    Time m_offTime;          ///< \brief Time interval between packets
-    Name m_interestName;     ///< \brief NDN Name of the Interest (use Name)
-    Time m_freshness;
-    uint32_t m_signature;
-    Name m_keyLocator;
-
 
     // Interest queue definition (interest name)
     std::queue<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestQueue;
+
+    // Interest buffer - store the incoming interest before interest splitting
+    std::queue<std::string> interestBuffer;
 
     // Timeout check and RTT measurement
     std::map<std::string, ns3::Time> m_timeoutCheck;
@@ -234,7 +237,8 @@ protected:
     int numTimeout;
 
     // This one is used to make sure duplicate retransmission request from upper tier will be ignored
-    boost::circular_buffer<std::string> m_timeoutList; // Currently initialize with size of 100
+    // boost::circular_buffer: its size is fixed upon creation, and once it is filled to capacity, adding new elements will overwrite the oldest elements
+    boost::circular_buffer<std::string> m_timeoutList;
 
     // Aggregation list
     std::map<uint32_t, std::vector<std::string>> map_agg_oldSeq_newName; // name segments
@@ -245,7 +249,6 @@ protected:
     std::map<uint32_t, int> count; // count of aggregation
     std::map<uint32_t, std::vector<std::string>> congestionSignalList; // result after aggregating congestion signal
     std::map<uint32_t, bool> congestionSignal; // congestion signal for current node
-
 
     // Response/Aggregation time measurement
     std::map<std::string, ns3::Time> startTime;
@@ -262,7 +265,17 @@ protected:
     std::map<std::string, std::set<std::string>> aggregationMap;
 
 
-
+    uint32_t m_seq;      ///< @brief currently requested sequence number
+    uint32_t m_seqMax;   ///< @brief maximum number of sequence number
+    EventId m_sendEvent; ///< @brief EventId of pending "send packet" event
+    Time m_retxTimer;    ///< @brief Currently estimated retransmission timer
+    EventId m_retxEvent; ///< @brief Event to check whether or not retransmission should be performed
+    Ptr<RttEstimator> m_rtt; ///< @brief RTT estimator
+    Time m_offTime;          ///< \brief Time interval between packets
+    Name m_interestName;     ///< \brief NDN Name of the Interest (use Name)
+    Time m_freshness;
+    uint32_t m_signature;
+    Name m_keyLocator;
 
     struct RetxSeqsContainer : public std::set<uint32_t> {
     };

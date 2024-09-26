@@ -83,10 +83,9 @@ private:
     uint32_t
     GetWindow() const;
 
-    // For testing purpose, measure the consumer's window
-    void WindowRecorder();
+    void WindowRecorder(std::string prefix);
 
-    void ResponseTimeRecorder(bool flag);
+    void ResponseTimeRecorder(std::string prefix, bool flag);
 
     void InitializeLogFile();
 
@@ -111,8 +110,7 @@ private:
     double m_addRttSuppress;
     bool m_reactToCongestionMarks;
 
-    // For testing purpose, consumer window monitor
-    std::string windowTimeRecorder = folderPath + "/consumer_window.txt";
+
     EventId windowMonitor;
 
 

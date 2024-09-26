@@ -149,7 +149,8 @@ Consumer::Consumer()
     : suspiciousPacketCount(0)
     , totalInterestThroughput(0)
     , totalDataThroughput(0)
-    , numChild(0)
+    , throughputStable(false)
+    , linkCount(0)
     , globalSeq(0)
     , globalRound(0)
     , broadcastSync(false)
@@ -218,7 +219,6 @@ Consumer::ConstructAggregationTree()
     std::map<std::string, std::vector<std::string>> rawAggregationTree;
     std::vector<std::vector<std::string>> rawSubTree;
 
-
     if (tree.aggregationTreeConstruction(dataPointNames, m_constraint)) {
         rawAggregationTree = tree.aggregationAllocation;
         rawSubTree = tree.noCHTree;
@@ -254,7 +254,8 @@ Consumer::ConstructAggregationTree()
          std::cout << std::endl;
      }*/
 
-    // Create complete "aggregationTree" from raw ones
+    // Create complete "aggregationTree"
+    // This section combine different data structure into a complete one
     aggregationTree.push_back(rawAggregationTree);
     while (!rawSubTree.empty()) {
         const auto& item = rawSubTree[0];
@@ -277,17 +278,11 @@ Consumer::ConstructAggregationTree()
             // 1. Aggregator
             // Initialize "broadcastList" for tree broadcasting synchronization
             if (pair.first != m_nodeprefix) {
-                broadcastList.push_back(pair.first);
+                broadcastList.insert(pair.first);
             }
             // 2. Consumer
             // Initialize "globalTreeRound" for all rounds (if there're multiple sub-trees)
             else {
-                // Specify the number of consumer's child nodes (links)
-                if (numChild == 0) {
-                    numChild = pair.second.size();
-                    NS_LOG_DEBUG("The number of child nodes: " << numChild);
-                }
-
                 std::vector<std::string> leavesRound;
                 std::cout << "Round " << i << " has the following leaf nodes: ";
                 for (const auto& leaves : pair.second) {
@@ -302,7 +297,15 @@ Consumer::ConstructAggregationTree()
         i++;
     }
 
+    // Compute link count
+    for (const auto& a : globalTreeRound) {
+        for (const auto& b : a) {
+            linkCount++;
+        }
+    }
+
     // Initialize variables for RTO computation/congestion control
+    // ToDo: RTT is only specified for each sub-tree now, need to specify each flow for fine-grained control
     for (int i = 0; i < globalTreeRound.size(); i++) {
         initRTO[i] = false;
         RTO_Timer[i] = 6 * m_retxTimer;
@@ -320,8 +323,6 @@ Consumer::ConstructAggregationTree()
 void
 Consumer::StartApplication() // Called at time specified by Start
 {
-    Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
-
     App::StartApplication();
 
     // Construct the tree
@@ -389,7 +390,7 @@ Consumer::aggregate(const ModelData& data, const uint32_t& seq)
 {
     // first initialization
     if (sumParameters.find(seq) == sumParameters.end()){
-        sumParameters[seq] = std::vector<float>(300, 0.0f);
+        sumParameters[seq] = std::vector<float>(3000, 0.0f);
     }
 
     // Aggregate data
@@ -525,7 +526,7 @@ Consumer::SetRetxTimer(Time retxTimer)
     }
 
     // Schedule timeout check event
-    NS_LOG_DEBUG("Next interval to check timeout is: " << m_retxTimer.GetMilliSeconds() << " ms");
+    NS_LOG_DEBUG("Next interval to check timeout is: " << m_retxTimer.GetMicroSeconds() << " us");
     m_retxEvent = Simulator::Schedule(m_retxTimer, &Consumer::CheckRetxTimeout, this);
 }
 
@@ -551,8 +552,8 @@ Consumer::CheckRetxTimeout()
 {
     Time now = Simulator::Now();
 
-    //NS_LOG_DEBUG("Check timeout after: " << m_retxTimer.GetMilliSeconds() << " ms");
-    //NS_LOG_DEBUG("Current timeout threshold is: " << m_timeoutThreshold.GetMilliSeconds() << " ms");
+    //NS_LOG_DEBUG("Check timeout after: " << m_retxTimer.GetMicroSeconds() << " us");
+    //NS_LOG_DEBUG("Current timeout threshold is: " << m_timeoutThreshold.GetMicroSeconds() << " us");
 
     for (auto it = m_timeoutCheck.begin(); it != m_timeoutCheck.end();){
         // Parse the string and extract the first segment, e.g. "agg0", then find out its round
@@ -607,7 +608,7 @@ Consumer::RTOMeasurement(int64_t resTime, int roundIndex)
     }
     int64_t RTO = SRTT[roundIndex] + 4 * RTTVAR[roundIndex]; // RTO = SRTT + K * RTTVAR, where K = 4
 
-    return MilliSeconds(2 * RTO);
+    return MicroSeconds(4 * RTO);
 }
 
 
@@ -747,8 +748,9 @@ void Consumer::SendInterest(shared_ptr<Name> newName)
     m_timeoutCheck[nameWithSeq] = ns3::Simulator::Now();
 
     // Start response time
-    if (startTime.find(nameWithSeq) == startTime.end())
-        startTime[nameWithSeq] = ns3::Simulator::Now();
+/*    if (startTime.find(nameWithSeq) == startTime.end())
+        startTime[nameWithSeq] = ns3::Simulator::Now();*/
+    startTime[nameWithSeq] = Simulator::Now();
 
     shared_ptr<Interest> interest = make_shared<Interest>();
     interest->setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
@@ -762,9 +764,13 @@ void Consumer::SendInterest(shared_ptr<Name> newName)
 
     // Record interest throughput
     // Actual interests sending and retransmission are recorded as well
-    int interestSize = interest->wireEncode().size();
-    totalInterestThroughput += interestSize;
-    NS_LOG_DEBUG("Interest size: " << interestSize);
+    // Start after throughput is stable (when cwnd decreases for the first time)
+    if (throughputStable) {
+        int interestSize = interest->wireEncode().size();
+        totalInterestThroughput += interestSize;
+        NS_LOG_DEBUG("Interest size: " << interestSize);
+    }
+
 }
 
 ///////////////////////////////////////////////////
@@ -791,8 +797,11 @@ Consumer::OnData(shared_ptr<const Data> data)
     NS_LOG_INFO("Received content object: " << boost::cref(*data));
 
     // Record data throughput
-    totalDataThroughput += dataSize;
-    NS_LOG_DEBUG("The incoming data packet size is: " << dataSize);
+    if (throughputStable) {
+        totalDataThroughput += dataSize;
+        NS_LOG_DEBUG("The incoming data packet size is: " << dataSize);
+    }
+
 
     // Erase timeout
     if (m_timeoutCheck.find(dataName) != m_timeoutCheck.end())
@@ -812,9 +821,9 @@ Consumer::OnData(shared_ptr<const Data> data)
             // Response time computation (RTT)
             if (startTime.find(dataName) != startTime.end()){
                 responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
-                ResponseTimeSum(responseTime[dataName].GetMilliSeconds());
+                ResponseTimeSum(responseTime[dataName].GetMicroSeconds());
                 startTime.erase(dataName);
-                NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
+                NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMicroSeconds() << " us");
             }
 
             // Search round index
@@ -827,22 +836,25 @@ Consumer::OnData(shared_ptr<const Data> data)
 
 
             // RTT_threshold measurement initialization is done after 3 iterations, before that, don't perform cwnd control
-            if (RTT_count[roundIndex] >= globalTreeRound[roundIndex].size() * 3 && responseTime[dataName].GetMilliSeconds() > RTT_threshold[roundIndex]) {
+            if (RTT_count[roundIndex] >= globalTreeRound[roundIndex].size() * 3 && responseTime[dataName].GetMicroSeconds() > RTT_threshold[roundIndex]) {
                 ECNLocal = true;
             }
 
             // Setup RTT_threshold based on RTT of the first 5 iterations, then update RTT_threshold after each new iteration based on EWMA
             // ToDo: What about setting up a initial cwnd to run several iterations, other than start cwnd from 1
-            RTTThresholdMeasure(responseTime[dataName].GetMilliSeconds(), roundIndex);
+            RTTThresholdMeasure(responseTime[dataName].GetMicroSeconds(), roundIndex);
 
             // Record response time
-            ResponseTimeRecorder(responseTime[dataName], seq, ECNLocal, RTT_measurement[roundIndex], RTT_threshold[roundIndex]);
+            ResponseTimeRecorder(roundIndex,name_sec0,seq,responseTime[dataName],ECNLocal);
+
+            // Record RTO
+            RTORecorder(name_sec0, roundIndex);
 
             // Reset RetxTimer and timeout interval
-            RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMilliSeconds(), roundIndex);
+            RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMicroSeconds(), roundIndex);
             m_timeoutThreshold[roundIndex] = RTO_Timer[roundIndex];
-            NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMilliSeconds() << " ms");
-            NS_LOG_DEBUG("Current RTO measurement: " << RTO_Timer[roundIndex].GetMilliSeconds() << " ms");
+            NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMicroSeconds() << " us");
+            NS_LOG_DEBUG("Current RTO measurement: " << RTO_Timer[roundIndex].GetMicroSeconds() << " us");
 
 
             // This data exist in the map, perform aggregation
@@ -875,8 +887,8 @@ Consumer::OnData(shared_ptr<const Data> data)
                 // Calculate aggregation time
                 if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
                     aggregateTime[seq] = ns3::Simulator::Now() - aggregateStartTime[seq];
-                    AggregateTimeSum(aggregateTime[seq].GetMilliSeconds());
-                    NS_LOG_DEBUG("Iteration " << std::to_string(seq) << " aggregation time is: " << aggregateTime[seq].GetMilliSeconds() << " ms");
+                    AggregateTimeSum(aggregateTime[seq].GetMicroSeconds());
+                    NS_LOG_DEBUG("Iteration " << std::to_string(seq) << " aggregation time is: " << aggregateTime[seq].GetMicroSeconds() << " us");
                     aggregateStartTime.erase(seq);
                 } else {
                     NS_LOG_DEBUG("Error when calculating aggregation time, no reference found for seq " << seq);
@@ -888,14 +900,16 @@ Consumer::OnData(shared_ptr<const Data> data)
 
             /// Stop simulation
             if (iterationCount == m_iteNum) {
+                stopSimulation = Simulator::Now();
+
                 NS_LOG_DEBUG("Reach " << m_iteNum << " iterations, stop!");
                 NS_LOG_INFO("Timeout is triggered " << suspiciousPacketCount << " times.");
                 NS_LOG_INFO("Total interest throughput is: " << totalInterestThroughput << " bytes.");
                 NS_LOG_INFO("Total data throughput is: " << totalDataThroughput << " bytes.");
-                NS_LOG_INFO("The average aggregation time of Consumer in " << iterationCount << " iteration is: " << GetAggregateTimeAverage() << " ms");
+                NS_LOG_INFO("The average aggregation time of Consumer in " << iterationCount << " iteration is: " << GetAggregateTimeAverage() << " us");
 
                 // Record throughput into file
-                ThroughputRecorder(totalInterestThroughput, totalDataThroughput);
+                ThroughputRecorder(totalInterestThroughput, totalDataThroughput, startSimulation, startThroughputMeasurement);
 
                 // Stop simulation
                 ns3::Simulator::Stop();
@@ -919,6 +933,12 @@ Consumer::OnData(shared_ptr<const Data> data)
         if (broadcastList.empty()) {
             broadcastSync = true;
             NS_LOG_DEBUG("Synchronization of tree broadcasting finished!");
+
+            // Record aggregation tree into file
+            AggTreeRecorder();
+
+            // Record simulation start time, actual aggregation process starts now
+            startSimulation = Simulator::Now();
         }
     }
 }
@@ -952,51 +972,54 @@ Consumer::RTTThresholdMeasure(int64_t responseTime, int index)
 
 
 /**
- * Record the RTT every 5 ms, store them in a file
+ * Record the RTT when receiving data packet
  */
 void
-Consumer::RTORecorder()
+Consumer::RTORecorder(std::string prefix, int roundIndex)
 {
     // Open the file using fstream in append mode
-    std::ofstream file(RTO_recorder, std::ios::app);
+    std::ofstream file(RTO_recorder[prefix], std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << RTO_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << RTO_recorder[prefix] << std::endl;
         return;
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds();
+    file << ns3::Simulator::Now().GetMicroSeconds() << " " << RTO_Timer[roundIndex].GetMicroSeconds() << std::endl;
+
+/*
     for (const auto& timer : RTO_Timer) {
-        file << " " << timer.second.GetMilliSeconds();
+        file << " " << timer.second.GetMicroSeconds();
     }
-    file << std::endl;
+    file << std::endl;*/
 
     // Close the file
     file.close();
-    Simulator::Schedule(MilliSeconds(5), &Consumer::RTORecorder, this);
 }
 
 
 
 /**
- * Record the response time for each returned packet, store them in a file
+ * Record the response time for each returned packet within corresponding files (per-flow CC)
  * @param responseTime
  * @param seq sequence number
  * @param ECN Whether ECN exist in current packet, type is boolean
  */
 void
-Consumer::ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_measure, int64_t threshold_actual) {
+Consumer::ResponseTimeRecorder(int roundIndex, std::string prefix, uint32_t seq, Time responseTime, bool ECN) {
+    
     // Open the file using fstream in append mode
-    std::ofstream file(responseTime_recorder, std::ios::app);
+    std::ofstream file(responseTime_recorder[prefix], std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << responseTime_recorder[prefix] << std::endl;
+        Simulator::Stop();
         return;
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << seq << " " << ECN << " " << threshold_actual << " " << responseTime.GetMilliSeconds();
+    file << ns3::Simulator::Now().GetMicroSeconds() << " " << seq  << " " << responseTime.GetMicroSeconds() << " " << ECN;
 
     // Close the file
     file.close();
@@ -1019,7 +1042,7 @@ Consumer::AggregateTimeRecorder(Time aggregateTime) {
     }
 
     // Write aggregation time to file, followed by a new line
-    file << Simulator::Now().GetMilliSeconds() << " " << aggregateTime.GetMilliSeconds() << std::endl;
+    file << Simulator::Now().GetMicroSeconds() << " " << aggregateTime.GetMicroSeconds() << std::endl;
 
     file.close();
 }
@@ -1033,10 +1056,21 @@ void
 Consumer::InitializeLogFile()
 {
     // Open the file and clear all contents for all log files
-    OpenFile(RTO_recorder);
-    OpenFile(responseTime_recorder);
+    for (int roundIndex = 0; roundIndex < globalTreeRound.size(); roundIndex++) {
+        for (int i = 0; i < globalTreeRound[roundIndex].size(); i++) {
+            // RTT/RTO recorder
+            responseTime_recorder[globalTreeRound[roundIndex][i]] = folderPath + "/consumer_RTT_round" + std::to_string(roundIndex) + "_" + globalTreeRound[roundIndex][i] + ".txt";
+            RTO_recorder[globalTreeRound[roundIndex][i]] = folderPath + "/consumer_RTO_round" + std::to_string(roundIndex) + "_" + globalTreeRound[roundIndex][i] + ".txt";
+            OpenFile(responseTime_recorder[globalTreeRound[roundIndex][i]]);
+            OpenFile(RTO_recorder[globalTreeRound[roundIndex][i]]);
+        }
+    }
+
+    // Aggregation time, AggTree, throughput
+    aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt";
     OpenFile(aggregateTime_recorder);
     OpenFile(throughput_recorder);
+    OpenFile(aggTree_recorder);
 }
 
 
@@ -1048,7 +1082,7 @@ Consumer::InitializeLogFile()
 bool
 Consumer::CanDecreaseWindow(int64_t threshold)
 {
-    if (Simulator::Now().GetMilliSeconds() - lastWindowDecreaseTime.GetMilliSeconds() >= threshold) {
+    if (Simulator::Now().GetMicroSeconds() - lastWindowDecreaseTime.GetMicroSeconds() >= threshold) {
         NS_LOG_DEBUG("Window decrease is allowed.");
         return true;
     } else {
@@ -1065,7 +1099,7 @@ Consumer::CanDecreaseWindow(int64_t threshold)
  * @param dataThroughput
  */
 void
-Consumer::ThroughputRecorder(int interestThroughput, int dataThroughput)
+Consumer::ThroughputRecorder(int interestThroughput, int dataThroughput, Time start_simulation, Time start_throughput)
 {
     // Open the file using fstream in append mode
     std::ofstream file(throughput_recorder, std::ios::app);
@@ -1076,9 +1110,52 @@ Consumer::ThroughputRecorder(int interestThroughput, int dataThroughput)
     }
 
     // Write aggregation time to file, followed by a new line
-    file << interestThroughput << " " << dataThroughput << " " << Simulator::Now().GetSeconds() << std::endl;
+    file << interestThroughput << " " << dataThroughput << " " << linkCount << " " << start_throughput.GetMicroSeconds() << " " << Simulator::Now().GetMicroSeconds() << std::endl;
 
     file.close();
 }
+
+
+
+/**
+ * Record the constructed aggregation tree into file
+ * It's done when receiving "Initialization" data
+ */
+void
+Consumer::AggTreeRecorder() {
+
+    // Open the file using fstream in append mode
+    std::ofstream file(aggTree_recorder, std::ios::app);
+
+    if (!file.is_open()) {
+        std::cerr << "Failed to open the file: " << aggTree_recorder << std::endl;
+        return;
+    }
+
+    int i = 0;
+    NS_LOG_DEBUG("Start writing aggregation tree into the log file.");
+    for (const auto& map : aggregationTree) {
+        for (const auto& pair : map) {
+            // Aggregator
+            if (pair.first != m_nodeprefix) {
+                file << pair.first << ": ";
+                for (const auto& value : pair.second) {
+                    file << value << " ";
+                }
+            }
+            // Consumer
+            else {
+                file << pair.first << " -> round " << i << ": ";
+                for (const auto& value : pair.second) {
+                    file << value << " ";
+                }
+            }
+            file << std::endl;
+        }
+        i++;
+    }
+    file.close();
+}
+
 } // namespace ndn
 } // namespace ns3

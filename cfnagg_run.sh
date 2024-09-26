@@ -62,11 +62,20 @@ fi
 cd ../../../
 
 # Start simulation
-NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator ./waf --run agg-aimd-test
-#NS_LOG=ndn.Consumer:ndn.ConsumerINA ./waf --run agg-aimd-test
+#NS_LOG=ndn.Consumer:ndn.ConsumerINA:ndn.Aggregator ./waf --run agg-aimd-test
+NS_LOG=ndn.Consumer:ndn.ConsumerINA ./waf --run agg-aimd-test
+
 
 # Generate simulation result
 cd ./src/ndnSIM/experiments
-$PYTHON throughput_measurement.py
-$PYTHON consumer_result_generator.py
-$PYTHON agg_result_generator.py
+$PYTHON bandwidth_utilization.py
+
+# Check whether bandwidth utilization is computed successfully
+if [ $? -ne 0 ]; then
+    echo "Fail to compute bandwidth utilization, please check again!"
+    exit 1
+fi
+
+#$PYTHON throughput_measurement.py
+#$PYTHON consumer_result_generator.py
+#$PYTHON agg_result_generator.py

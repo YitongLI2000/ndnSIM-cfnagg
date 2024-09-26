@@ -128,7 +128,7 @@ void
 ConsumerINA::ScheduleNextPacket()
 {
     if (!broadcastSync && globalSeq != 0) {
-        NS_LOG_INFO("Haven't finished tree broadcasting synchronization, don't send actual data packet for now.");
+        NS_LOG_INFO("Wait for tree broadcasting to be finished (before start sending interest).");
     }
     else if (m_window == static_cast<uint32_t>(0)) {
         Simulator::Remove(m_sendEvent);
@@ -160,10 +160,10 @@ ConsumerINA::ScheduleNextPacket()
 void
 ConsumerINA::StartApplication()
 {
+    Consumer::StartApplication();
+
     // Initialize log files
     InitializeLogFile();
-
-    Consumer::StartApplication();
 }
 
 
@@ -224,6 +224,12 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
             } else {
                 NS_LOG_INFO("Congestion signal exists in consumer!");
                 WindowDecrease("ConsumerCongestion");
+
+                // Record the time for starting throughput measurement
+                if (!throughputStable) {
+                    startThroughputMeasurement = Simulator::Now();
+                }
+                throughputStable = true;
             }
         }
 /*        else if (ECNRemote) {
@@ -235,8 +241,11 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
             WindowIncrease();
         }
 
-        // Record the last flag in in RTT's log
-        ResponseTimeRecorder(isWindowDecreaseSuppressed);
+        // Record whether current window decreasing is suppressed
+        ResponseTimeRecorder(name_sec0,isWindowDecreaseSuppressed);
+
+        // Record cwnd
+        WindowRecorder(name_sec0);
     }
 
     if (m_inFlight > static_cast<uint32_t>(0)) {
@@ -244,9 +253,6 @@ ConsumerINA::OnData(shared_ptr<const Data> data)
     }
 
     NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
-
-    // Record cwnd
-    WindowRecorder();
 
     ScheduleNextPacket();
 }
@@ -352,17 +358,17 @@ ConsumerINA::WindowDecrease(std::string type)
  * Record window every 5 ms, store them into a file
  */
 void
-ConsumerINA::WindowRecorder()
+ConsumerINA::WindowRecorder(std::string prefix)
 {
     // Open file; on first call, truncate it to delete old content
-    std::ofstream file(windowTimeRecorder, std::ios::app);
+    std::ofstream file(windowRecorder[prefix], std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << windowRecorder[prefix] << std::endl;
         return;
     }
 
-    file << ns3::Simulator::Now().GetMilliSeconds() << " " << m_window << " " << m_ssthresh << std::endl;
+    file << ns3::Simulator::Now().GetMicroSeconds() << " " << m_window << " " << m_ssthresh << std::endl;
 
     file.close();
 }
@@ -370,17 +376,17 @@ ConsumerINA::WindowRecorder()
 
 
 /**
- * Record "isWindowDecreaseSuppressed" bool flag
+ * Record "isWindowDecreaseSuppressed" bool flag, using appending mode to open the file
  * @param flag
  */
 void
-ConsumerINA::ResponseTimeRecorder(bool flag)
+ConsumerINA::ResponseTimeRecorder(std::string prefix, bool flag)
 {
     // Open the file using fstream in append mode
-    std::ofstream file(responseTime_recorder, std::ios::app);
+    std::ofstream file(responseTime_recorder[prefix], std::ios::app);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open the file: " << responseTime_recorder << std::endl;
+        std::cerr << "Failed to open the file: " << responseTime_recorder[prefix] << std::endl;
         return;
     }
 
@@ -392,6 +398,7 @@ ConsumerINA::ResponseTimeRecorder(bool flag)
 }
 
 
+
 /**
  * Initialize log file for "consumer_window.txt"
  */
@@ -401,8 +408,13 @@ ConsumerINA::InitializeLogFile()
     // Check whether object path exists, create it if not
     CheckDirectoryExist(folderPath);
 
-    // Open the file and clear all contents for log file
-    OpenFile(windowTimeRecorder);
+    // window recorder
+    for (int roundIndex = 0; roundIndex < globalTreeRound.size(); roundIndex++) {
+        for (int i = 0; i < globalTreeRound[roundIndex].size(); i++) {
+            windowRecorder[globalTreeRound[roundIndex][i]] = folderPath + "/consumer_window_round" + std::to_string(roundIndex) + "_" + globalTreeRound[roundIndex][i] + ".txt";
+            OpenFile(windowRecorder[globalTreeRound[roundIndex][i]]);
+        }
+    }
 
     Consumer::InitializeLogFile();
 }

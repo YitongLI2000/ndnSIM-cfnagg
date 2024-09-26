@@ -8,7 +8,7 @@
  * Constructor
  */
 ModelData::ModelData()
-: parameters(300, 0.0f)
+: parameters(3000, 0.0f)
 {}
 
 

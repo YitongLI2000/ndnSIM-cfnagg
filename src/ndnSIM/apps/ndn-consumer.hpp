@@ -112,10 +112,10 @@ public:
     Time RTOMeasurement(int64_t resTime, int roundIndex);
 
     // Record results in files, for testing purpose only
-    void RTORecorder();
+    void RTORecorder(std::string prefix, int roundIndex);
 
     // Record RTT of each packet and some other relevant info
-    void ResponseTimeRecorder(Time responseTime, uint32_t seq, bool ECN, int64_t threshold_measure, int64_t threshold_actual);
+    void ResponseTimeRecorder(int roundIndex, std::string prefix, uint32_t seq, Time responseTime, bool ECN);
 
     void AggregateTimeRecorder(Time aggregateTime);
 
@@ -123,7 +123,9 @@ public:
 
     bool CanDecreaseWindow(int64_t threshold);
 
-    void ThroughputRecorder(int interestThroughput, int dataThroughput);
+    void ThroughputRecorder(int interestThroughput, int dataThroughput, Time start_simulation, Time start_throughput);
+
+    void AggTreeRecorder();
 
 public:
     typedef void (*LastRetransmittedInterestDataDelayCallback)(Ptr<App> app, uint32_t seqno, Time delay, int32_t hopCount);
@@ -166,29 +168,33 @@ protected:
     // Topology file name
     std::string filename = "src/ndnSIM/examples/topologies/DataCenterTopology.txt";
 
-    // Testing log file
-    // ToDo: Update logging for multiple rounds
-    std::string RTO_recorder = folderPath + "/consumer_RTO.txt"; //'Time', 'RTO'
-    std::string responseTime_recorder = folderPath + "/consumer_RTT.txt"; //'Time', 'seq', ‘ECN’， ‘RTT threshold’，'RTT', 'isWindowDecreaseSuppressed'
-    std::string aggregateTime_recorder = folderPath + "/consumer_aggregationTime.txt"; //'Time', 'aggTime'
-    //std::string throughput_recorder = folderPath + "/throughput.txt";
+    // Log path
+    std::string folderPath = "src/ndnSIM/results/logs/con";
+    std::map<std::string, std::string> RTO_recorder;
+    std::map<std::string, std::string> responseTime_recorder; // Format: 'Time', 'seq', 'RTT', ‘ECN’, 'isWindowDecreaseSuppressed'
+    std::map<std::string, std::string> windowRecorder; // Format: 'Time', 'cwnd', 'cwnd threshold' (when cwnd is larger than the threshold, cwnd increase will be suppressed)
+    std::string aggregateTime_recorder; // Format: 'Time', 'aggTime'
     int suspiciousPacketCount; // When timeout is triggered, add one
 
     // Update when WindowDecrease() is called every time, used for CWA algorithm
     Time lastWindowDecreaseTime;
     bool isWindowDecreaseSuppressed;
 
-    // Local throughput measurement
+    // Throughput measurement
     int totalInterestThroughput;
     int totalDataThroughput;
-    int numChild; // The number of child nodes of consumer, used to specify the actual number of links for bandwidth utilization
+    Time startSimulation;
+    Time stopSimulation;
+    Time startThroughputMeasurement;
+    bool throughputStable;
 
     // Congestion/rate control
-    std::vector<std::vector<std::string>> globalTreeRound;
+    std::vector<std::vector<std::string>> globalTreeRound; // First dimension: round. Second dimension: next-tier leaves
     std::map<int, std::vector<int64_t>> RTT_threshold_vec; // Each mapping represents one round (if there're more than one round)
     std::map<int, int64_t> RTT_threshold; // Actual threshold used to detect congestion
     std::map<int, int64_t> RTT_measurement; // The estimated RTT value using EWMA
     std::map<int, int> RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
+    int linkCount;
 
     // Global sequence number
     uint32_t globalSeq;
@@ -197,7 +203,7 @@ protected:
     // Interest queue
     std::queue<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestQueue; // tuple: iteration, round, name
 
-    // Get producer list
+    // Get producer list, which are used to generate new interests
     std::string proList;
 
     // Constructed aggregation Tree
@@ -205,7 +211,7 @@ protected:
 
     // Broadcast aggregation tree
     bool broadcastSync;
-    std::vector<std::string> broadcastList; // Elements within this vector need to be broadcasted
+    std::set<std::string> broadcastList; // Elements within the set need to be broadcasted, all elements are unique
 
     // Aggregation synchronization
     std::map<uint32_t, std::vector<std::vector<std::string>>> map_agg_oldSeq_newName; // Manage names for round

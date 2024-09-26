@@ -99,7 +99,6 @@ namespace ns3 {
         Config::Connect("/NodeList/*/DeviceList/*/$ns3::PointToPointNetDevice/PhyRxDrop", MakeCallback(&PacketDropCallback));
 
         // Get constraint from config.ini
-        //int constraint = GetConstraint();
         ConfigParams params = GetConfigParams();
 
         for (NodeContainer::Iterator i = NodeList::Begin(); i != NodeList::End(); ++i) {

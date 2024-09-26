@@ -7,8 +7,8 @@
 #include <cstdint>
 
 struct ModelData {
-    std::vector<float> parameters;
-    std::vector<std::string> congestedNodes;
+    std::vector<float> parameters; // Model parameters
+    std::vector<std::string> congestedNodes; // Meta data
 
     ModelData();
 };

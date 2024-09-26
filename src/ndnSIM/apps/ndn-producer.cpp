@@ -123,13 +123,13 @@ Producer::OnInterest(shared_ptr<const Interest> interest)
     data->setFreshnessPeriod(::ndn::time::milliseconds(m_freshness.GetMilliSeconds()));
 
     // generate new data content
-    // new data format and generate random 300 model parameters
+    // new data format and generate random 3000 model parameters
     ModelData modelData;
 
     std::default_random_engine generator(std::random_device{}()); // create random generator
     std::uniform_real_distribution<float> distribution(0.0f, 10.0f); // define range (0.0, 10.0)
     modelData.parameters.clear(); // clear the previous result
-    for (int i = 0; i < 300; ++i){
+    for (int i = 0; i < 3000; ++i){
         modelData.parameters.push_back(distribution(generator)); // generate random float range (0.0, 10.0)
     }
 

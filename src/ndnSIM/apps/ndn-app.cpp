@@ -203,6 +203,10 @@ App::OpenFile(const std::string& filename)
     if (!file.is_open()) {
         std::cerr << "Failed to open the file: " << filename << std::endl;
     }
+    // ToDo: for testing, delete later
+    else {
+        std::cout << "Open " << filename << " successfully!" << std::endl;
+    }
     file.close();
 }
 

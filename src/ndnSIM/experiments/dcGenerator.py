@@ -21,7 +21,7 @@ def is_valid_parameter(input_param):
 
 def is_valid_bitrate(bitrate):
     """
-    Check whether input bitrate in in the correct format
+    Check whether input bitrate is in the correct format
     :param bitrate: Input bitrate
     :return:
     """
@@ -29,13 +29,25 @@ def is_valid_bitrate(bitrate):
     return pattern.match(bitrate) is not None
 
 
-def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bit_rate):
+def is_valid_delay(delay):
+    """
+    Check whether input delay is in the correct format
+    :param delay: Input delay (ms)
+    :return:
+    """
+    pattern = re.compile(r"^\d+ms$")
+    return pattern.match(delay)
+
+
+
+def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bit_rate, delay):
     """
     Generate DC topology file in .txt format
     :param num_producers:
     :param num_aggregators:
     :param num_producers_per_edge:
     :param bit_rate:
+    :param delay:
     :return:
     """
     num_edge_forwarders = (num_producers // num_producers_per_edge) + 1
@@ -62,17 +74,17 @@ def generate_topology(num_producers, num_aggregators, num_producers_per_edge, bi
         output_file.write("\nlink\n\n")
 
         for i in range(num_producers):
-            output_file.write(f"pro{i}       forwarder{i // num_producers_per_edge}       {bit_rate}       1       2ms       50\n")
+            output_file.write(f"pro{i}       forwarder{i // num_producers_per_edge}       {bit_rate}       1       {delay}       50\n")
 
-        output_file.write(f"con0       forwarder0       {bit_rate}       1       2ms       50\n")
+        output_file.write(f"con0       forwarder0       {bit_rate}       1       {delay}       50\n")
 
         for i in range(num_edge_forwarders):
             for j in range(num_aggregators):
-                output_file.write(f"forwarder{i}       agg{j}       {bit_rate}       1       2ms       50\n")
+                output_file.write(f"forwarder{i}       agg{j}       {bit_rate}       1       {delay}       50\n")
 
         for i in range(num_core_forwarders):
             for j in range(num_aggregators):
-                output_file.write(f"forwarder{num_edge_forwarders + i}       agg{j}       {bit_rate}       1       2ms       50\n")
+                output_file.write(f"forwarder{num_edge_forwarders + i}       agg{j}       {bit_rate}       1       {delay}       50\n")
 
 
 def main():
@@ -96,18 +108,19 @@ def main():
         print(f"Error! Bitrate '{config['DCNTopology']['Bitrate']}' is not in the correct format. Only the following format is allowed:\n1bps, 1Kbps, 1Mbps, 1Gbps")
         sys.exit(1)
 
+    if not is_valid_delay(config['DCNTopology']['propagationDelay']):
+        print(f"Error! Propagation delay '{config['DCNTopology']['propagationDelay']}' is not in the correct format. Only the following format is allowed:\n1ms")
+        sys.exit(1)
+
     num_producers = int(config['DCNTopology']['numProducer'])
     num_aggregators = int(config['DCNTopology']['numAggregator'])
     number_producer_per_edge = int(config['DCNTopology']['numEdgeForwarder'])
     bit_rate = config['DCNTopology']['Bitrate']
+    propagation_delay = config['DCNTopology']['propagationDelay']
 
-    print("Current Working Directory:", os.getcwd())
+    #print("Current Working Directory:", os.getcwd())
 
-
-
-
-
-    generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate)
+    generate_topology(num_producers, num_aggregators, number_producer_per_edge, bit_rate, propagation_delay)
 
     print("Topology generated successfully!")
 
