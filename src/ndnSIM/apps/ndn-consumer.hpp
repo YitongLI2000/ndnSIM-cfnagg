@@ -109,7 +109,7 @@ public:
     void RTTThresholdMeasure(int64_t responseTime, int roundIndex);
 
     // Based on response time, measure RTT for each round
-    Time RTOMeasurement(int64_t resTime, int roundIndex);
+    Time RTOMeasure(int64_t resTime, int roundIndex);
 
     // Record results in files, for testing purpose only
     void RTORecorder(std::string prefix, int roundIndex);
@@ -243,7 +243,7 @@ protected:
     bool ECNRemote;
 
     // defined for response time
-    std::map<std::string, ns3::Time> startTime;
+    std::map<std::string, ns3::Time> rttStartTime;
     std::map<std::string, ns3::Time> responseTime;
     int64_t total_response_time;
     int round;

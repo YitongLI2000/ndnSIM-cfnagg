@@ -57,7 +57,7 @@ public:
 
     virtual void ScheduleNextPacket();
 
-    std::vector<std::pair<std::string, std::string>> InterestSplitting(std::string originalInterest);
+    std::vector<shared_ptr<Name>> InterestSplitting(std::string originalInterest);
 
     void SendPacket();
 
@@ -77,9 +77,9 @@ public:
 
     uint32_t GetSeqMax() const;
 
-    void WindowIncrease();
+    void WindowIncrease(std::string prefix);
 
-    void WindowDecrease(std::string type);
+    void WindowDecrease(std::string prefix, std::string type);
 
     // Data aggregation
     void aggregate(const ModelData& data, const uint32_t& seq);
@@ -100,10 +100,10 @@ public:
     int64_t
     GetAggregateTimeAverage();
 
-    Time RTOMeasurement(int64_t resTime);
+    Time RTOMeasure(std::string prefix, int64_t resTime);
 
     // Measure threshold for congestion control
-    void RTTThresholdMeasure(int64_t responseTime);
+    void RTTThresholdMeasure(std::string prefix, int64_t responseTime);
 
 
     // Parse the received aggregation tree
@@ -125,7 +125,7 @@ public:
 
     void InitializeParameters();
 
-    bool CanDecreaseWindow(int64_t threshold);
+    bool CanDecreaseWindow(std::string prefix, int64_t threshold);
 
     void ThroughputRecorder(int interestThroughput, int dataThroughput, Time start_simulation);
 
@@ -165,11 +165,6 @@ protected:
     std::string aggregateTime_recorder;
     int suspiciousPacketCount;
 
-    // Update when WindowDecrease() is called every time, used for CWA algorithm
-    Time LastWindowDecreaseTime;
-    bool isWindowDecreaseSuppressed;
-
-
     // Local throughput measurement
     int totalInterestThroughput;
     int totalDataThroughput;
@@ -181,10 +176,14 @@ protected:
 
     // Congestion control, measure RTT threshold to detect congestion
     int numChild; // Start congestion control after 3 iterations
-    std::vector<int64_t> RTT_threshold_vec;
-    int64_t RTT_threshold; // Actual threshold used to detect congestion
-    int64_t RTT_measurement; // The estimated RTT value using EWMA
-    int RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
+    // TODO: delete these later
+    //int64_t RTT_threshold; // Actual threshold used to detect congestion
+    //int64_t RTT_measurement; // The estimated RTT value using EWMA
+    //int RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
+    //! Testing the following three parameters
+    std::map<std::string, int64_t> RTT_threshold; // Actual threshold used to detect congestion
+    std::map<std::string, int64_t> RTT_measurement; // The estimated RTT value using EWMA
+    std::map<std::string, int> RTT_count; // How many RTT packets this node has received, used to estimate how many iterations have passed
     float RTT_a; // Factor used in EWMA, recommended value is between 0.1 and 0.3
     float Threshold_factor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
 
@@ -198,23 +197,26 @@ protected:
     // TODO: delete these two later, extend them into map first
     //TracedValue<double> m_window;
     //TracedValue<uint32_t> m_inFlight;
-    //std::map<std::string, double> m_window;
-    //std::map<std::string, uint32_t> m_inFlight;
-    double m_window;
-    uint32_t m_inFlight;
+    std::map<std::string, double> m_window;
+    std::map<std::string, uint32_t> m_inFlight;
+    std::map<std::string, double> m_ssthresh;
     bool m_setInitialWindowOnTimeout;
 
+    // Update when WindowDecrease() is called every time, used for CWA algorithm
+    // TODO: delete this later
+    //Time LastWindowDecreaseTime;
+    std::map<std::string, Time> LastWindowDecreaseTime;
+    bool isWindowDecreaseSuppressed;
+
     // AIMD cwnd management
-    double m_ssthresh;
     bool m_useCwa;
-    uint32_t m_highData;
-    double m_recPoint;
+    //uint32_t m_highData;
     double m_alpha; // Timeout decrease factor
     double m_beta; // Local congestion decrease factor
     double m_gamma; // Remote congestion decrease factor
     double m_EWMAFactor; // Factor used in EWMA, recommended value is between 0.1 and 0.3
     double m_thresholdFactor; // Factor to compute "RTT_threshold", i.e. "RTT_threshold = Threshold_factor * RTT_measurement"
-    double m_addRttSuppress;
+    double m_addRttSuppress; // TODO: delete this later
     bool m_reactToCongestionMarks; // PCON's implementation, disable it for now
     int m_maxQueue; // Max queue size
     uint32_t m_iteNum;
@@ -225,17 +227,25 @@ protected:
     std::queue<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestQueue;
 
     // Interest buffer - store the incoming interest before interest splitting
-    std::queue<std::string> interestBuffer;
+    std::queue<shared_ptr<Name>> interestBuffer;
 
     // Timeout check and RTT measurement
-    std::map<std::string, ns3::Time> m_timeoutCheck;
-    Time m_timeoutThreshold;
-    int64_t SRTT;
-    int64_t RTTVAR;
-    int roundRTT;
-    Time RTO_Timer;
-    int numTimeout;
+    std::map<std::string, Time> m_timeoutCheck;
+    std::map<std::string, Time> m_timeoutThreshold; // test successfully
+    std::map<std::string, int64_t> SRTT;
+    std::map<std::string, int64_t> RTTVAR;
+    std::map<std::string, int> roundRTT;
+    std::map<std::string, Time> RTO_Timer;
+    std::map<std::string, int> numTimeout;
+    // TODO: delete this later
+    //Time m_timeoutThreshold;
+    //int64_t SRTT;
+    //int64_t RTTVAR;
+    //int roundRTT;
+    //Time RTO_Timer;
+    //int numTimeout;
 
+    //? This variable may not need to erase elements after data packet returns?
     // This one is used to make sure duplicate retransmission request from upper tier will be ignored
     // boost::circular_buffer: its size is fixed upon creation, and once it is filled to capacity, adding new elements will overwrite the oldest elements
     boost::circular_buffer<std::string> m_timeoutList;
@@ -251,13 +261,13 @@ protected:
     std::map<uint32_t, bool> congestionSignal; // congestion signal for current node
 
     // Response/Aggregation time measurement
-    std::map<std::string, ns3::Time> startTime;
-    std::map<std::string, ns3::Time> responseTime;
+    std::map<std::string, Time> rttStartTime;
+    std::map<std::string, Time> responseTime;
     int64_t totalResponseTime;
     int round;
 
-    std::map<uint32_t, ns3::Time> aggregateStartTime;
-    std::map<uint32_t, ns3::Time> aggregateTime;
+    std::map<uint32_t, Time> aggregateStartTime;
+    std::map<uint32_t, Time> aggregateTime;
     int64_t totalAggregateTime;
     int iteration;
 

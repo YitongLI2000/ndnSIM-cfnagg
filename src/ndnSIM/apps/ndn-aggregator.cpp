@@ -79,7 +79,7 @@ Aggregator::GetTypeId(void)
                           MakeTimeChecker())
             .AddAttribute("RetxTimer",
                           "Timeout defining how frequent retransmission timeouts should be checked",
-                          StringValue("50ms"),
+                          StringValue("5ms"),
                           MakeTimeAccessor(&Aggregator::GetRetxTimer, &Aggregator::SetRetxTimer),
                           MakeTimeChecker())
             .AddAttribute("Freshness",
@@ -192,18 +192,8 @@ Aggregator::Aggregator()
     , totalDataThroughput(0)
     , m_rand(CreateObject<UniformRandomVariable>())
     , treeSync(false)
-    , RTT_threshold(0)
-    , RTT_measurement(0)
-    , RTT_count(0)
     , RTT_a(0.3)
-    , m_inFlight(0)
-    , m_ssthresh(std::numeric_limits<double>::max())
-    , m_highData(0)
-    , m_recPoint(0.0)
     , m_seq(0)
-    , SRTT(0)
-    , RTTVAR(0)
-    , roundRTT(0)
     , m_timeoutList(100)
     , totalResponseTime(0)
     , round(0)
@@ -338,13 +328,12 @@ Aggregator::CheckRetxTimeout()
 
     //NS_LOG_DEBUG("Checking timeout. Current inFlight: " << m_inFlight);
 
-    //NS_LOG_DEBUG("Check timeout after: " << m_retxTimer.GetMicroSeconds() << " us");
-    //NS_LOG_DEBUG("Current timeout threshold is: " << m_timeoutThreshold.GetMicroSeconds() << " us");
-
     for (auto it = m_timeoutCheck.begin(); it != m_timeoutCheck.end();){
-        //NS_LOG_DEBUG("Interest name: " << it->first);
-        if (now - it->second > m_timeoutThreshold) {
-            std::string name = it->first;
+        std::string name = it->first;
+        std::string flow = make_shared<Name>(name)->get(0).toUri();
+        //std::string flow = name.substr(0, name.find("/", 1));
+        NS_LOG_DEBUG("Flow name: " << flow);
+        if (now - it->second > m_timeoutThreshold[flow]) {
             it = m_timeoutCheck.erase(it);
             OnTimeout(name);
         } else {
@@ -359,44 +348,46 @@ Aggregator::CheckRetxTimeout()
 /**
  * Based on RTT of the first iteration, compute their RTT average as threshold, use the threshold for congestion control
  * Apply Exponentially Weighted Moving Average (EWMA) for RTT Threshold Computation
+ * @param prefix
  * @param responseTime
  */
 void
-Aggregator::RTTThresholdMeasure(int64_t responseTime)
+Aggregator::RTTThresholdMeasure(std::string prefix, int64_t responseTime)
 {
-    if (RTT_count == 0) {
-        RTT_measurement = responseTime;
+    if (RTT_count[prefix] == 0) {
+        RTT_measurement[prefix] = responseTime;
     } else {
-        RTT_measurement = m_EWMAFactor * responseTime + (1 - m_EWMAFactor) * RTT_measurement;
-        RTT_threshold = m_thresholdFactor * RTT_measurement;
+        RTT_measurement[prefix] = m_EWMAFactor * responseTime + (1 - m_EWMAFactor) * RTT_measurement[prefix];
+        RTT_threshold[prefix] = m_thresholdFactor * RTT_measurement[prefix];
     }
 
-    if (RTT_count >= numChild * 3) // Whether it's larger than 3 iterations
+    if (RTT_count[prefix] >= numChild * 3) // Whether it's larger than 3 iterations
     {
-        NS_LOG_DEBUG("Apply RTT_threshold, current value is: " << RTT_threshold);
+        NS_LOG_DEBUG("Apply RTT_threshold, current value is: " << RTT_threshold[prefix]);
     }
-    RTT_count++;
+    RTT_count[prefix]++;
 }
 
 
 
 /**
  * Measure new RTO
+ * @param prefix
  * @param resTime
  * @return New RTO
  */
 Time
-Aggregator::RTOMeasurement(int64_t resTime)
+Aggregator::RTOMeasure(std::string prefix, int64_t resTime)
 {
-    if (roundRTT == 0) {
-        RTTVAR = resTime / 2;
-        SRTT = resTime;
+    if (roundRTT[prefix] == 0) {
+        RTTVAR[prefix] = resTime / 2;
+        SRTT[prefix] = resTime;
     } else {
-        RTTVAR = 0.75 * RTTVAR + 0.25 * std::abs(SRTT - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
-        SRTT = 0.875 * SRTT + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
+        RTTVAR[prefix] = 0.75 * RTTVAR[prefix] + 0.25 * std::abs(SRTT[prefix] - resTime); // RTTVAR = (1 - b) * RTTVAR + b * |SRTT - RTTsample|, where b = 0.25
+        SRTT[prefix] = 0.875 * SRTT[prefix] + 0.125 * resTime; // SRTT = (1 - a) * SRTT + a * RTTsample, where a = 0.125
     }
-    roundRTT++;
-    int64_t RTO = SRTT + 4 * RTTVAR; // RTO = SRTT + K * RTTVAR, where K = 4
+    roundRTT[prefix]++;
+    int64_t RTO = SRTT[prefix] + 4 * RTTVAR[prefix]; // RTO = SRTT + K * RTTVAR, where K = 4
 
     return MicroSeconds(4 * RTO);
 }
@@ -410,21 +401,26 @@ Aggregator::RTOMeasurement(int64_t resTime)
 void
 Aggregator::OnTimeout(std::string nameString)
 {
+    // TODO: need to check the correctness of this name_sec0 extraction
+    shared_ptr<Name> name = make_shared<Name>(nameString);
+    std::string name_sec0 = name->get(0).toUri();
+    NS_LOG_DEBUG("Name section 0 of timeout packet: " << name_sec0);
+
     // Designed for AIMD
-    WindowDecrease("timeout");
+    WindowDecrease(name_sec0, "timeout");
 
     // Start tracing timeout packets
     m_timeoutList.push_back(nameString);
 
-    if (m_inFlight > static_cast<uint32_t>(0)){
-        m_inFlight--;
+    if (m_inFlight[name_sec0] > static_cast<uint32_t>(0)){
+        m_inFlight[name_sec0]--;
     } else {
         NS_LOG_DEBUG("m_inFlight is 0, stop.");
         Simulator::Stop();
     }
-    NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
+    NS_LOG_DEBUG("Window: " << m_window[name_sec0] << ", InFlight: " << m_inFlight[name_sec0]);
 
-    shared_ptr<Name> name = make_shared<Name>(nameString);
+    
     SendInterest(name);
 
     // Add one to "suspiciousPacketCount"
@@ -445,10 +441,11 @@ Aggregator::SetRetxTimer(Time retxTimer)
         Simulator::Remove(m_retxEvent);
     }
 
-    // Schedule new timeout
-    m_timeoutThreshold = retxTimer;
+    //? Move the following timeout threshold initialization to where all variables are initialized
+    //m_timeoutThreshold = retxTimer;
+
     //NS_LOG_DEBUG("Next interval to check timeout is: " << m_retxTimer.GetMicroSeconds() << " us");
-    m_retxEvent = Simulator::Schedule(m_retxTimer, &Aggregator::CheckRetxTimeout, this);
+    //m_retxEvent = Simulator::Schedule(m_retxTimer, &Aggregator::CheckRetxTimeout, this);
 }
 
 
@@ -539,7 +536,7 @@ ModelData Aggregator::getMean(const uint32_t& seq){
 
     } else {
         NS_LOG_DEBUG("Error when get aggregation result, please exit and check!");
-        ns3::Simulator::Stop();
+        Simulator::Stop();
     }
 
     return result;
@@ -571,7 +568,8 @@ void
 Aggregator::SetWindow(uint32_t window)
 {
     m_initialWindow = window;
-    m_window = m_initialWindow;
+    //TODO: delete later
+    //m_window = m_initialWindow;
 }
 
 
@@ -617,14 +615,14 @@ Aggregator::GetSeqMax() const
  * Increase cwnd
  */
 void
-Aggregator::WindowIncrease()
+Aggregator::WindowIncrease(std::string prefix)
 {
-    if (m_window < m_ssthresh) {
-        m_window += 1.0;
+    if (m_window[prefix] < m_ssthresh[prefix]) {
+        m_window[prefix] += 1.0;
     } else {
-        m_window += (1.0 / m_window);
+        m_window[prefix] += (1.0 / m_window[prefix]);
     }
-    NS_LOG_DEBUG("Window size increased to " << m_window);
+    NS_LOG_DEBUG("Window size of flow '" << prefix << "' is increased to " << m_window[prefix]);
 }
 
 
@@ -633,30 +631,30 @@ Aggregator::WindowIncrease()
  * Decrease cwnd
  */
 void
-Aggregator::WindowDecrease(std::string type)
+Aggregator::WindowDecrease(std::string prefix, std::string type)
 {
     // AIMD for timeout
     if (type == "timeout") {
-        m_ssthresh = m_window * m_alpha;
-        m_window = m_ssthresh;
+        m_ssthresh[prefix] = m_window[prefix] * m_alpha;
+        m_window[prefix] = m_ssthresh[prefix];
     }
     else if (type == "LocalCongestion") {
-        m_ssthresh = m_window * m_beta;
-        m_window = m_ssthresh;
+        m_ssthresh[prefix] = m_window[prefix] * m_beta;
+        m_window[prefix] = m_ssthresh[prefix];
 
         // Perform CWA when handling consumer congestion
-        LastWindowDecreaseTime = Simulator::Now();
+        LastWindowDecreaseTime[prefix] = Simulator::Now();
     }
     else if (type == "RemoteCongestion") {
-        m_ssthresh = m_window * m_gamma;
-        m_window = m_ssthresh;
+        m_ssthresh[prefix] = m_window[prefix] * m_gamma;
+        m_window[prefix] = m_ssthresh[prefix];
     }
 
     // Window size can't be reduced below initial size
-    if (m_window < m_initialWindow) {
-        m_window = m_initialWindow;
+    if (m_window[prefix] < m_initialWindow) {
+        m_window[prefix] = m_initialWindow;
     }
-    NS_LOG_DEBUG("Window size decreased to " << m_window);
+    NS_LOG_DEBUG("Window size of flow '" << prefix << "' is decreased to " << m_window[prefix]);
 }
 
 
@@ -675,13 +673,18 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
     std::string interestType = interest->getName().get(-2).toUri();
 
     if (interestType == "data") {
+        shared_ptr<Name> interestName = make_shared<Name>(interest->getName().toUri());
         std::string originalName = interest->getName().toUri();
 
         // Store interest into interest buffer first, perform interest splitting when "ScheduleNextPacket"
-        // TODO: enable later
-        //interestBuffer.push(originalName);
+        // TODO: delete later
+        NS_LOG_DEBUG("Tested interest name: " << interestName->toUri());
+        // What will happen if the buffer is full?        
+        // TODO: enable later, need to change the input from string into Name object
+        interestBuffer.push(interestName);
 
-        // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/Seq"
+        // TODO: this section can be deleted if interest splitting is successful
+/*         // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/Seq"
         std::string dest = interest->getName().get(1).toUri();
         uint32_t seq = interest->getName().get(-1).toSequenceNumber();
 
@@ -703,7 +706,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
         // Check whether aggregation tree is received
         if (!treeSync){
             NS_LOG_DEBUG("Error! No aggregation tree info!");
-            ns3::Simulator::Stop();
+            Simulator::Stop();
         }
 
         // Initialize new iteration bool
@@ -763,7 +766,7 @@ Aggregator::OnInterest(shared_ptr<const Interest> interest)
         if (map_agg_oldSeq_newName.find(seq) == map_agg_oldSeq_newName.end() && m_agg_newDataName.find(seq) == m_agg_newDataName.end()){
             map_agg_oldSeq_newName[seq] = value_agg; // name segments
             m_agg_newDataName[seq] = originalName; // whole name
-        }
+        } */
 
         ScheduleNextPacket();
 
@@ -841,7 +844,6 @@ Aggregator::ScheduleNextPacket()
 {
     // TODO: need to change the logic to perform interest splitting, then send new interests
     /// Be careful of the using of Simulator::ScheduleNow(), understanding how to call a function with input params, e.g.
-
 /*    // Use a lambda to encapsulate the function call with arguments
     Simulator::ScheduleNow([=]() {
         ProcessPacket(msg, packetId);
@@ -851,9 +853,49 @@ Aggregator::ScheduleNextPacket()
     if (!treeSync) {
         NS_LOG_INFO("Haven't received aggregation tree, don't send new interests for now.");
     }
-    else if (m_window == static_cast<uint32_t>(0)) {
+    else {
+        // Initialize a bool to check if all cwnds allow new sending
+        bool canSend = true;
+
+        for (const auto& [key, value] : aggregationMap) {
+            if (m_window[key] == static_cast<uint32_t>(0)) {
+                Simulator::Remove(m_sendEvent);
+                NS_LOG_INFO("Window size is 0, stop simulation, sth goes wrong.");
+                Simulator::Stop();
+                break;
+
+                // TODO: If everything works well, it can be deleted
+                //m_sendEvent = Simulator::Schedule(Seconds(std::min<double>(0.5, (m_retxTimer * 6).GetSeconds())), &Aggregator::SendPacket, this);
+            }
+            else if (m_inFlight[key] >= m_window[key]) {
+                // Set "canSend" to false if any of the window is full
+                canSend = false;
+
+                // TODO: delete later
+                NS_LOG_DEBUG("FLow - " << key << ": m_inFlight >= m_window, do nothing.");
+
+                break;
+            }
+        }
+
+        // Based on "canSend" to decide whether to send new interests
+        if (canSend) {
+            if (m_sendEvent.IsRunning()) {
+                Simulator::Remove(m_sendEvent);
+            }
+            NS_LOG_INFO("Start sending new interests.");
+            m_sendEvent = Simulator::ScheduleNow(&Aggregator::SendPacket, this);
+        } else {
+            NS_LOG_INFO("cwnd doesn't allow new sending, do nothing.");
+        }
+        
+
+
+    }
+/*     else if (m_window == static_cast<uint32_t>(0)) {
         Simulator::Remove(m_sendEvent);
-        NS_LOG_DEBUG("New event in " << (std::min<double>(0.5, m_rtt->RetransmitTimeout().ToDouble(Time::S))) << " sec");
+        NS_LOG_INFO("Window size is 0, stop simulation, sth goes wrong.");
+        Simulator::Stop();
 
         m_sendEvent = Simulator::Schedule(Seconds(std::min<double>(0.5, (m_retxTimer * 6).GetSeconds())), &Aggregator::SendPacket, this);
     }
@@ -869,24 +911,30 @@ Aggregator::ScheduleNextPacket()
         }
         NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
         m_sendEvent = Simulator::ScheduleNow(&Aggregator::SendPacket, this);
-    }
+    } */
 }
 
 
 
 /**
- * Split the original interest into several new interests
+ * Split the original interest into several new interests.
+ * Return a list containing new interests if the original interest is not a duplicate retransmission; otherwise, return null vector
  * @param originalInterest Original interest's name
- * @return A list containing new interests, each one is in the format: "agg0", "agg0/pro0.pro1/data/seq=0"
+ * @return A list containing new interests, each one is in the format: "agg0/pro0.pro1/data/seq=0"
  */
-std::vector<std::pair<std::string, std::string>>
+std::vector<shared_ptr<Name>>
 Aggregator::InterestSplitting(std::string originalInterest)
 {
-    // TODO: change the logic of this function to split new interests, then triggers interest sending
+    //* change the logic of this function to split new interests, return corresponding splited interests as a vector
     // TODO: before sending interest, check whether it's duplicate retransmission interest from downstream
-/*    // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/Seq"
-    std::string dest = interest->getName().get(1).toUri();
-    uint32_t seq = interest->getName().get(-1).toSequenceNumber();
+
+    // Parse incoming interest, retrieve their name segments, currently use "/NextHop/Destination/Type/Seq"
+    shared_ptr<Name> originalName = make_shared<Name>(originalInterest);
+    std::string dest = originalName->get(1).toUri();
+    uint32_t seq = originalName->get(-1).toSequenceNumber();
+    // TODO: delete later
+    NS_LOG_DEBUG("dest: " << dest );
+    NS_LOG_DEBUG("seq: " << seq );
 
     std::vector<std::string> segments;  // Vector to store the segments
     std::istringstream iss(dest);
@@ -895,8 +943,9 @@ Aggregator::InterestSplitting(std::string originalInterest)
     // Store the interest segments
     std::vector<std::string> value_agg;
 
-    // Store divided elements and push them into interest queue
-    std::vector<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestList;
+    //? Store divided elements and push them into interest queue
+    //std::vector<std::tuple<uint32_t, bool, shared_ptr<Name>>> interestList;
+    std::vector<shared_ptr<Name>> splitInterestList;
 
     // split the destination segment into several ones and store them individually in a vector called "segments"
     while (std::getline(iss, segment, '.')) {
@@ -904,16 +953,16 @@ Aggregator::InterestSplitting(std::string originalInterest)
     }
 
     // Check whether aggregation tree is received
-    if (!treeSync){
+/*     if (!treeSync){
         NS_LOG_DEBUG("Error! No aggregation tree info!");
-        ns3::Simulator::Stop();
-    }
+        Simulator::Stop();
+    } */
 
-    // Initialize new iteration bool
-    bool isNewIteration = true;
+    //? Initialize new iteration bool
+    //bool isNewIteration = true;
 
-    // Signal indicating duplicate retransmission
-    bool isDuplicate = false;
+    //? Signal indicating duplicate retransmission
+    //bool isDuplicate = false;
 
     // Divide interests and push them into queue
     for (const auto& [child, leaves] : aggregationMap) {
@@ -932,6 +981,7 @@ Aggregator::InterestSplitting(std::string originalInterest)
 
         if (name_sec1.empty()) {
             NS_LOG_INFO("No interest needs to be sent to node " << child << " in this iteration");
+            Simulator::Stop();
             continue;
         } else {
             name = "/" + child + "/" + name_sec1 + "/data";
@@ -940,44 +990,88 @@ Aggregator::InterestSplitting(std::string originalInterest)
             std::string newNameString = newName->toUri();
             value_agg.push_back(newNameString);
 
-            // Check whether incoming interest is a retransmission duplicate, if so, drop it directly
+            //* start here, if duplicate, return with null vector {}, no need for isDuplicate flag
+            //* Checked. It seems to work well.
+            //? Check whether incoming interest is a retransmission duplicate, if so, drop the entire packet
             auto it = std::find(m_timeoutList.begin(), m_timeoutList.end(), newNameString);
             if (it != m_timeoutList.end()) {
-                isDuplicate = true;
+                //isDuplicate = true;
+                // Return null vector if it's duplicate retransmission
+                NS_LOG_INFO("This is a duplicate retransmission from downstream, drop the entire packet!");
+                return {};
             }
 
             // Store divided interests into interest list first, push into interest queue later if they're not duplicate retransmission
-            interestList.push_back(std::make_tuple(seq, isNewIteration, newName));
-            isNewIteration = false;
+            //interestList.push_back(std::make_tuple(seq, isNewIteration, newName));
+            //isNewIteration = false;
+            splitInterestList.push_back(newName);
         }
     }
 
     // If current packet isn't duplicate, then push divided interests into interest queue; otherwise, drop this interest
     // TODO: is it possible to add logic to check whether the interest queue is full, if not, then drop the interest?
-    if (!isDuplicate) {
+/*     if (!isDuplicate) {
         for (const auto& element : interestList) {
             interestQueue.push(element);
         }
     } else {
         NS_LOG_INFO("This is a duplicate retransmission from downstream, drop the entire packet!");
         return;
-    }
+    } */
 
+
+   //! If both maps are not empty, drop the entire downstream interest
+   //! If maps are empty, perform the normal operation
     if (map_agg_oldSeq_newName.find(seq) == map_agg_oldSeq_newName.end() && m_agg_newDataName.find(seq) == m_agg_newDataName.end()){
         map_agg_oldSeq_newName[seq] = value_agg; // name segments
-        m_agg_newDataName[seq] = originalName; // whole name
-    }*/
+        m_agg_newDataName[seq] = originalInterest; // whole name
+        return splitInterestList;
+    } else {
+        // Current assume this section will be called when downstream retransmission comes, only retransmit interests, but not update the aggreagtion table (otherwise, it will override previous aggregation results)
+        // From system perspective, the problem which leads to this, is either downstream has packet loss, or due to some other reason, downstream retransmission is triggered earlier than upstream
+        //* Correct response should be dropping the entire packet
+        NS_LOG_INFO("Retrasmission interest from downstream, drop the interest.");
+        return {};
+        //return splitInterestList;
+    }
+
+   //* Section for debugging
+   // The following is code for debugging, to check whether the conflict is caused by different duplicate retransmission?
+/*     if (map_agg_oldSeq_newName.find(seq) == map_agg_oldSeq_newName.end() && m_agg_newDataName.find(seq) == m_agg_newDataName.end()){
+        map_agg_oldSeq_newName[seq] = value_agg; // name segments
+        m_agg_newDataName[seq] = originalInterest; // whole name
+        return splitInterestList;
+    } else {
+        // 'seq' exists in the maps; check if the values are the same
+        bool isSameNameSegment = (map_agg_oldSeq_newName[seq] == value_agg);
+        bool isSameWholeName = (m_agg_newDataName[seq] == originalInterest);
+
+        if (!isSameNameSegment) {
+            NS_LOG_DEBUG("Conflict, please check!");
+            NS_LOG_DEBUG("map_agg_oldSeq_newName");
+            //Simulator::Stop();
+            return splitInterestList;
+        } else if (!isSameWholeName) {
+            NS_LOG_DEBUG("Conflict, please check!");
+            NS_LOG_DEBUG("originalInterest");
+            //Simulator::Stop();
+            return splitInterestList;
+        } else {
+            NS_LOG_DEBUG("Conflict exists, but they're the same, no need to worry.");
+            return splitInterestList;
+        }
+    } */
 }
 
 
 
 /**
- * Schedule to send new interests
+ * Check whether interest buffer is empty, if not, send new interests
  */
 void
 Aggregator::SendPacket()
 {
-    if (!interestQueue.empty()) {
+/*     if (!interestQueue.empty()) {
         auto interestTuple = interestQueue.front();
         interestQueue.pop();
         uint32_t iteration = std::get<0>(interestTuple);
@@ -989,6 +1083,31 @@ Aggregator::SendPacket()
             aggregateStartTime[iteration] = ns3::Simulator::Now();
         }
         SendInterest(name);
+        ScheduleNextPacket();
+    } else {
+        NS_LOG_INFO("Pending new interests from upper tier...");
+    } */
+
+    if (!interestBuffer.empty()) {
+        std::string originalName = interestBuffer.front()->toUri();
+        shared_ptr<Name> oldName = make_shared<Name>(originalName);
+        uint32_t seq = oldName->get(-1).toSequenceNumber();
+        NS_LOG_DEBUG("seq: " << seq);
+
+        interestBuffer.pop();
+        auto interestList = InterestSplitting(originalName);
+        if (interestList.empty()) {
+            NS_LOG_INFO("This is a duplicate retransmission from downstream, drop the entire packet!");
+        } else {
+            // Start computing aggregation time
+            aggregateStartTime[seq] = Simulator::Now();
+
+            for (const auto& newName : interestList) {
+                SendInterest(newName);
+            }
+        }
+
+        //* Schedule next packet sending - Works well for now
         ScheduleNextPacket();
     } else {
         NS_LOG_INFO("Pending new interests from upper tier...");
@@ -1008,12 +1127,15 @@ Aggregator::SendInterest(shared_ptr<Name> newName)
         return;
 
     std::string nameWithSeq = newName->toUri();
+    std::string name_sec0 = newName->get(0).toUri();
+    // TODO: delete later
+    NS_LOG_DEBUG("name_sec0: " << name_sec0);
 
     // Trace timeout
-    m_timeoutCheck[nameWithSeq] = ns3::Simulator::Now();
+    m_timeoutCheck[nameWithSeq] = Simulator::Now();
 
     // Start response time
-    startTime[nameWithSeq] = ns3::Simulator::Now();
+    rttStartTime[nameWithSeq] = Simulator::Now();
 
     NS_LOG_INFO("Sending new interest >>>> " << nameWithSeq);
     shared_ptr<Interest> newInterest = make_shared<Interest>();
@@ -1026,7 +1148,7 @@ Aggregator::SendInterest(shared_ptr<Name> newName)
     m_appLink->onReceiveInterest(*newInterest);
 
     // Designed for Window
-    m_inFlight++;
+    m_inFlight[name_sec0]++;
 
     // Record interest throughput
     // Actual interests sending and retransmission are recorded as well
@@ -1085,25 +1207,31 @@ Aggregator::OnData(shared_ptr<const Data> data)
     if (data_map != map_agg_oldSeq_newName.end())
     {
         // Response time computation (RTT)
-        if (startTime.find(dataName) != startTime.end()){
-            responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
+        if (rttStartTime.find(dataName) != rttStartTime.end()){
+            responseTime[dataName] = Simulator::Now() - rttStartTime[dataName];
             ResponseTimeSum(responseTime[dataName].GetMicroSeconds());
-            startTime.erase(dataName);
+            rttStartTime.erase(dataName);
         }
 
         // Reset RetxTimer and timeout interval
         // TODO: RTO threshold need to be measured for each flow
-        RTO_Timer = RTOMeasurement(responseTime[dataName].GetMicroSeconds());
-        m_timeoutThreshold = RTO_Timer;
+        RTO_Timer[name_sec0] = RTOMeasure(name_sec0, responseTime[dataName].GetMicroSeconds());
+        m_timeoutThreshold[name_sec0] = RTO_Timer[name_sec0];
         NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMicroSeconds() << " us");
-        NS_LOG_DEBUG("RTO measurement: " << RTO_Timer.GetMicroSeconds() << " us");
+        NS_LOG_DEBUG("RTO measurement: " << RTO_Timer[name_sec0].GetMicroSeconds() << " us");
 
         // Setup RTT_threshold based on RTT of the first 5 iterations, then update RTT_threshold after each new iteration based on EWMA
         // TODO: What about setting up a initial cwnd to run several iterations, other than start cwnd from 1
-        RTTThresholdMeasure(responseTime[dataName].GetMicroSeconds());
+        RTTThresholdMeasure(name_sec0, responseTime[dataName].GetMicroSeconds());
 
+        //? Need to be careful about whether RTT threshold becomes 0
         // RTT_threshold measurement initialization is done after 3 iterations, before that, don't perform cwnd control
-        if (RTT_count >= numChild * 3 && responseTime[dataName].GetMicroSeconds() > RTT_threshold) {
+        if (RTT_count[name_sec0] >= 3 && responseTime[dataName].GetMicroSeconds() > RTT_threshold[name_sec0]) {
+            //TODO: Error handling, check whether RTT threshold is computed correctly for each flow
+            if (RTT_threshold[name_sec0] == 0) {
+                NS_LOG_DEBUG("RTT threshold of " << name_sec0 << " is 0!");
+                Simulator::Stop();
+            }
             ECNLocal = true;
         }
 
@@ -1122,16 +1250,12 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }
 
         // Record RTT
-        ResponseTimeRecorder(responseTime[dataName], seq, name_sec0, ECNLocal, RTT_threshold);
+        ResponseTimeRecorder(responseTime[dataName], seq, name_sec0, ECNLocal, RTT_threshold[name_sec0]);
 
         // Record RTO
         RTORecorder(name_sec0);
 
         /// Congestion control loop starts
-        if (m_highData < seq) {
-            m_highData = seq;
-        }
-
         if (data->getCongestionMark() > 0) {
             if (m_reactToCongestionMarks) {
                 NS_LOG_DEBUG("Received congestion mark: " << data->getCongestionMark());
@@ -1142,11 +1266,11 @@ Aggregator::OnData(shared_ptr<const Data> data)
             }
         }
         else if (ECNLocal) {
-            if (!CanDecreaseWindow(RTT_measurement)) {
+            if (!CanDecreaseWindow(name_sec0, RTT_measurement[name_sec0])) {
                 NS_LOG_INFO("Window decrease is suppressed.");
             } else {
                 NS_LOG_INFO("Congestion signal exists in consumer!");
-                WindowDecrease("LocalCongestion");
+                WindowDecrease(name_sec0, "LocalCongestion");
             }
             congestionSignal[seq] = true;
         }
@@ -1156,14 +1280,14 @@ Aggregator::OnData(shared_ptr<const Data> data)
         }*/
         else {
             NS_LOG_INFO("No congestion, increase the cwnd.");
-            WindowIncrease();
+            WindowIncrease(name_sec0);
         }
 
-        if (m_inFlight > static_cast<uint32_t>(0)) {
-            m_inFlight--;
+        if (m_inFlight[name_sec0] > static_cast<uint32_t>(0)) {
+            m_inFlight[name_sec0]--;
         }
 
-        NS_LOG_DEBUG("Window: " << m_window << ", InFlight: " << m_inFlight);
+        NS_LOG_DEBUG("Window: " << m_window[name_sec0] << ", InFlight: " << m_inFlight[name_sec0]);
 
         // Record window after each new packet arrives
         // TODO: enable later
@@ -1180,7 +1304,7 @@ Aggregator::OnData(shared_ptr<const Data> data)
 
             // Aggregation time computation
             if (aggregateStartTime.find(seq) != aggregateStartTime.end()) {
-                aggregateTime[seq] = ns3::Simulator::Now() - aggregateStartTime[seq];
+                aggregateTime[seq] = Simulator::Now() - aggregateStartTime[seq];
                 AggregateTimeSum(aggregateTime[seq].GetMicroSeconds());
                 aggregateStartTime.erase(seq);
                 NS_LOG_INFO("Aggregator's aggregate time of sequence " << seq << " is: " << aggregateTime[seq].GetMicroSeconds() << " us");
@@ -1219,6 +1343,14 @@ Aggregator::OnData(shared_ptr<const Data> data)
             m_transmittedDatas(data, this, m_face);
             m_appLink->onReceiveData(*data);
 
+            // Clear aggregation time mapping for current iteration
+            aggregateStartTime.erase(seq);
+            aggregateTime.erase(seq);
+
+            // Clear aggregation mapping
+            map_agg_oldSeq_newName.erase(seq);
+            m_agg_newDataName.erase(seq);
+
             // All iterations have finished, record the entire throughput
             if (seq == m_iteNum) {
                 stopSimulation = Simulator::Now();
@@ -1228,9 +1360,14 @@ Aggregator::OnData(shared_ptr<const Data> data)
         } else{
             NS_LOG_DEBUG("Wait for others to aggregate.");
         }
+
+        // Clear rtt mapping of this packet
+        rttStartTime.erase(dataName);
+        responseTime.erase(dataName);
+
     }else{
         NS_LOG_DEBUG("Error, data name can't be recognized!");
-        ns3::Simulator::Stop();
+        Simulator::Stop();
     }
 }
 
@@ -1246,7 +1383,7 @@ Aggregator::WindowRecorder(std::string prefix)
     std::ofstream file(window_recorder[prefix], std::ios::app);
 
     if (file.is_open()) {
-        file << ns3::Simulator::Now().GetMicroSeconds() << " " << m_window << "\n";  // Write text followed by a newline
+        file << Simulator::Now().GetMicroSeconds() << " " << m_window[prefix] << "\n";  // Write text followed by a newline
         file.close(); // Close the file after writing
     } else {
         std::cerr << "Unable to open file: " << window_recorder[prefix] << std::endl;
@@ -1270,7 +1407,7 @@ Aggregator::ResponseTimeRecorder(Time responseTime, uint32_t seq, std::string pr
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMicroSeconds() << " " << seq << " " << ECN << " " << threshold_actual << " " << responseTime.GetMicroSeconds() << std::endl;
+    file << Simulator::Now().GetMicroSeconds() << " " << seq << " " << ECN << " " << threshold_actual << " " << responseTime.GetMicroSeconds() << std::endl;
 
     // Close the file
     file.close();
@@ -1294,7 +1431,7 @@ Aggregator::RTORecorder(std::string prefix)
     }
 
     // Write the response_time to the file, followed by a newline
-    file << ns3::Simulator::Now().GetMicroSeconds() << " " << RTO_Timer.GetMicroSeconds() << std::endl;
+    file << Simulator::Now().GetMicroSeconds() << " " << RTO_Timer[prefix].GetMicroSeconds() << std::endl;
 
     // Close the file
     file.close();
@@ -1356,16 +1493,34 @@ Aggregator::InitializeLogFile()
 
 /**
  * Initialize all parameters
+ * Initialize timeout checking mechanism, remove part of SetRetcTimer()'s function to here
  */
 void
 Aggregator::InitializeParameters()
 {
-/*     //? TODO: start from modifying the window calling within aggregator
     // Initialize window
     for (const auto& [key, value] : aggregationMap) {
         m_window[key] = m_initialWindow;
+        m_inFlight[key] = 0;
+        m_ssthresh[key] = std::numeric_limits<double>::max();
         NS_LOG_DEBUG("Window size of flow " << key << " is: " << m_window[key]);
-    } */
+
+        // Initialize RTO measurement parameters
+        SRTT[key] = 0;
+        RTTVAR[key] = 0;
+        roundRTT[key] = 0;
+
+        // Initialize RTT threshold
+        RTT_threshold[key] = 0;
+        RTT_measurement[key] = 0;
+        RTT_count[key] = 0;
+
+        // Initialize timeout checking
+        m_timeoutThreshold[key] = m_retxTimer;
+    }
+
+    // Start timeout checking
+    m_retxEvent = Simulator::Schedule(m_retxTimer, &Aggregator::CheckRetxTimeout, this);
 }
 
 
@@ -1374,9 +1529,9 @@ Aggregator::InitializeParameters()
  * @param threshold
  */
 bool
-Aggregator::CanDecreaseWindow(int64_t threshold)
+Aggregator::CanDecreaseWindow(std::string prefix, int64_t threshold)
 {
-    if (Simulator::Now().GetMicroSeconds() - LastWindowDecreaseTime.GetMicroSeconds() >= threshold) {
+    if (Simulator::Now().GetMicroSeconds() - LastWindowDecreaseTime[prefix].GetMicroSeconds() >= threshold) {
         return true;
     } else {
         return false;

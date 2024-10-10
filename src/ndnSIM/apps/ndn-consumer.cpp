@@ -126,7 +126,7 @@ Consumer::GetTypeId(void)
                     MakeIntegerChecker<int>())
       .AddAttribute("RetxTimer",
                     "Timeout defining how frequent retransmission timeouts should be checked",
-                    StringValue("50ms"),
+                    StringValue("5ms"),
                     MakeTimeAccessor(&Consumer::GetRetxTimer, &Consumer::SetRetxTimer),
                     MakeTimeChecker())
       .AddTraceSource("LastRetransmittedInterestDataDelay",
@@ -595,7 +595,7 @@ Consumer::CheckRetxTimeout()
  * @return New RTO
  */
 Time
-Consumer::RTOMeasurement(int64_t resTime, int roundIndex)
+Consumer::RTOMeasure(int64_t resTime, int roundIndex)
 {
     if (!initRTO[roundIndex]) {
         RTTVAR[roundIndex] = resTime / 2;
@@ -750,7 +750,7 @@ void Consumer::SendInterest(shared_ptr<Name> newName)
     // Start response time
 /*    if (startTime.find(nameWithSeq) == startTime.end())
         startTime[nameWithSeq] = ns3::Simulator::Now();*/
-    startTime[nameWithSeq] = Simulator::Now();
+    rttStartTime[nameWithSeq] = Simulator::Now();
 
     shared_ptr<Interest> interest = make_shared<Interest>();
     interest->setNonce(m_rand->GetValue(0, std::numeric_limits<uint32_t>::max()));
@@ -819,10 +819,10 @@ Consumer::OnData(shared_ptr<const Data> data)
         if (data_map != map_agg_oldSeq_newName.end() && data_agg != m_agg_newDataName.end()) {
 
             // Response time computation (RTT)
-            if (startTime.find(dataName) != startTime.end()){
-                responseTime[dataName] = ns3::Simulator::Now() - startTime[dataName];
+            if (rttStartTime.find(dataName) != rttStartTime.end()){
+                responseTime[dataName] = ns3::Simulator::Now() - rttStartTime[dataName];
                 ResponseTimeSum(responseTime[dataName].GetMicroSeconds());
-                startTime.erase(dataName);
+                rttStartTime.erase(dataName);
                 NS_LOG_INFO("Consumer's response time of sequence " << dataName << " is: " << responseTime[dataName].GetMicroSeconds() << " us");
             }
 
@@ -851,7 +851,7 @@ Consumer::OnData(shared_ptr<const Data> data)
             RTORecorder(name_sec0, roundIndex);
 
             // Reset RetxTimer and timeout interval
-            RTO_Timer[roundIndex] = RTOMeasurement(responseTime[dataName].GetMicroSeconds(), roundIndex);
+            RTO_Timer[roundIndex] = RTOMeasure(responseTime[dataName].GetMicroSeconds(), roundIndex);
             m_timeoutThreshold[roundIndex] = RTO_Timer[roundIndex];
             NS_LOG_DEBUG("responseTime for name : " << dataName << " is: " << responseTime[dataName].GetMicroSeconds() << " us");
             NS_LOG_DEBUG("Current RTO measurement: " << RTO_Timer[roundIndex].GetMicroSeconds() << " us");
